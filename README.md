@@ -5,7 +5,7 @@ The idea is from [the following paper](https://arxiv.org/abs/1611.04488).
 
 The original implementation is from [the repository](https://github.com/djsutherland/opt-mmd).
 
-# Setup
+# Setup of an environment
 
 I recommend to use conda in order to setup the environment easily.
 
@@ -15,13 +15,15 @@ conda env create -f environment.yml
 
 You have a Python environment with Python3.6.
 
-Then,
+# Install
+
+To install the code as a package,
 
 ```
-python setup install
+make install
 ```
 
-## Note with Python > 3.7
+## Note: with Python > 3.7
 
 Possible to use Python > 3.7, however, some modules are not available.
 
