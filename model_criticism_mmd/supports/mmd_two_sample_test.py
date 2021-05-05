@@ -20,14 +20,13 @@ def rbf_mmd_test(x: np.ndarray,
 
     Parameters
     ----------
-    X : row-instance feature array
+    x : row-instance feature array
 
-    Y : row-instance feature array
+    y : row-instance feature array
+
+    trained_params: A obtained parameters
 
     bandwidth : 'median' or 'trained'
-        The bandwidth of the RBF kernel (sigma).
-        If 'median', estimates the median pairwise distance in the
-        aggregate sample and uses that.
 
     null_samples : int
         How many times to sample from the null distribution.
@@ -45,9 +44,6 @@ def rbf_mmd_test(x: np.ndarray,
 
     null_samples : array of length null_samples
         The samples from the null distribution.
-
-    bandwidth : float
-        The used kernel bandwidth
     '''
     assert bandwidth in ('median', 'trained')
     if bandwidth == 'median':
@@ -79,4 +75,4 @@ def rbf_mmd_test(x: np.ndarray,
     stat = mmd.compute_statistic()
 
     p_val = np.mean(stat <= samps)
-    return p_val, stat, samps, bandwidth
+    return p_val, stat, samps

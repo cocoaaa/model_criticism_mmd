@@ -391,14 +391,20 @@ class ModelTrainerTorchBackend(TrainerBase):
         # end for
         return TrainedMmdParameters(
             scales=self.scales.detach().numpy(),
-            sigma=self.log_sigma.detach().numpy()[0],
+            sigma=torch.exp(self.log_sigma).detach().numpy()[0],
             training_log=training_log)
 
-    def mmd_distance(self, x: TypeInputData, y: TypeInputData) -> typing.Tuple[Tensor, Tensor]:
+    def mmd_distance(self, x: TypeInputData, y: TypeInputData,
+                     sigma: typing.Optional[float] = None) -> typing.Tuple[Tensor, Tensor]:
         assert self.scales is not None, 'run train() first'
         assert self.log_sigma is not None, 'run train() first'
+        if sigma is not None:
+            __sigma = torch.tensor([sigma])
+        else:
+            __sigma = torch.exp(self.log_sigma)
+
         x__ = self.to_tensor(x)
         y__ = self.to_tensor(y)
         rep_p, rep_q = self.operation_scale_product(x__, y__)
-        mmd2, ratio = self.mmd_metric.rbf_mmd2_and_ratio(rep_p, rep_q, self.log_sigma)
+        mmd2, ratio = self.mmd_metric.rbf_mmd2_and_ratio(rep_p, rep_q, __sigma)
         return mmd2, ratio

@@ -1,19 +1,12 @@
 # model_criticism_mmd
 
+The code to compute MMD value.
+In the computation process, you can obtain the ARD weight which represents ARD between 2 distributions. 
+
 The idea is from [the following paper](https://arxiv.org/abs/1611.04488).
 `"Generative Models and Model Criticism via Optimized Maximum Mean Discrepancy"`
 
 The original implementation is from [the repository](https://github.com/djsutherland/opt-mmd).
-
-# Setup of an environment
-
-I recommend to use conda in order to setup the environment easily.
-
-```
-conda env create -f environment.yml
-```
-
-You have a Python environment with Python3.6.
 
 # Install
 
@@ -23,9 +16,30 @@ To install the code as a package,
 make install
 ```
 
-## Note: with Python > 3.7
+## Setup full version
 
-Possible to use Python > 3.7, however, some modules are not available.
+Some codes in the package depend on old python versions. Thus, if you want to install full-functionality of the package,
+you need to build a Python environment.
+
+You can build it with a conda command.
+
+```
+conda env create -f environment.yml
+conda activate conda_env
+```
+
+You have a Python environment with Python3.6.
+
+Then,
+
+```
+make full
+```
+
+
+### Note: Python > 3.7
+
+If Python > 3.7, some modules are not available.
 
 ```
 model_criticism_mmd/supports/mmd_two_sample_test.py
@@ -34,7 +48,7 @@ model_criticism_mmd/backends/backend_theano.py
 
 # Examples
 
-TDB
+See jupyter notebooks.
 
 # Tests
 
