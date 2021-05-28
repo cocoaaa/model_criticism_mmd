@@ -7,6 +7,7 @@ from torch import Tensor
 from model_criticism_mmd.logger_unit import logger
 from sklearn.metrics.pairwise import euclidean_distances
 from model_criticism_mmd.models import TrainingLog, TrainedMmdParameters, TrainerBase
+from model_criticism_mmd.backends import kernels_torch
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -43,8 +44,8 @@ class ScaleLayer(torch.nn.Module):
 # MMD equation
 
 class MMD(object):
-    def __init__(self):
-        pass
+    def __init__(self, kernel_function_obj: kernels_torch.BaseKernel):
+        self.kernel_function_obj = kernel_function_obj
 
     @staticmethod
     def _mmd2_and_variance(K_XX: torch.Tensor,
@@ -129,6 +130,18 @@ class MMD(object):
         ratio = torch.div(mmd2, torch.sqrt(torch.max(var_est, min_var_est)))
         return mmd2, ratio
 
+    def process_mmd2_and_ratio(self, x: torch.Tensor, y: torch.Tensor, biased: bool = True, **kwargs
+                               ) -> typing.Tuple[torch.Tensor, torch.Tensor]:
+        if isinstance(self.kernel_function_obj, kernels_torch.MaternKernelFunction):
+            kernel_matrix_obj = self.kernel_function_obj.compute_kernel_matrix(x, y)
+        elif isinstance(self.kernel_function_obj, kernels_torch.RBFKernelFunction):
+            kernel_matrix_obj = self.kernel_function_obj.compute_kernel_matrix(x, y, **kwargs)
+        else:
+            raise NotImplementedError()
+        # end if
+        return self._mmd2_and_ratio(kernel_matrix_obj.k_xx, kernel_matrix_obj.k_xy, kernel_matrix_obj.k_yy,
+                                    unit_diagonal=True, biased=biased)
+
     def rbf_mmd2_and_ratio(self,
                            x: torch.Tensor,
                            y: torch.Tensor,
@@ -145,6 +158,8 @@ class MMD(object):
         x_sqnorms = torch.diagonal(xx, offset=0)
         y_sqnorms = torch.diagonal(yy, offset=0)
 
+        # todo this part is RBF kernel
+        # torch.exp(-1 * gamma * () is kernel
         k_xy = torch.exp(-1 * gamma * (-2 * xy + x_sqnorms[:, np.newaxis] + y_sqnorms[np.newaxis, :]))
         k_xx = torch.exp(-1 * gamma * (-2 * xx + x_sqnorms[:, np.newaxis] + x_sqnorms[np.newaxis, :]))
         k_yy = torch.exp(-1 * gamma * (-2 * yy + y_sqnorms[:, np.newaxis] + y_sqnorms[np.newaxis, :]))
@@ -156,8 +171,8 @@ class MMD(object):
 
 
 class ModelTrainerTorchBackend(TrainerBase):
-    def __init__(self):
-        self.mmd_metric = MMD()
+    def __init__(self, kernel_function_obj: kernels_torch.BaseKernel = kernels_torch.RBFKernelFunction()):
+        self.mmd_metric = MMD(kernel_function_obj)
         self.lr = None
         self.opt_log = None
         self.init_sigma_median = None
@@ -232,7 +247,13 @@ class ModelTrainerTorchBackend(TrainerBase):
         # 2. exp(sigma)
         __sigma = torch.exp(self.log_sigma)
         # 3. compute MMD and ratio
-        mmd2_pq, stat = self.mmd_metric.rbf_mmd2_and_ratio(x=rep_p, y=rep_q, sigma=__sigma, biased=True)
+        mmd2_pq, stat = self.mmd_metric.process_mmd2_and_ratio(x=rep_p, y=rep_q, sigma=__sigma, biased=True)
+        # for debug
+        if isinstance(self.mmd_metric.kernel_function_obj, kernels_torch.RBFKernelFunction):
+            __mmd2_pq, __stat = self.mmd_metric.rbf_mmd2_and_ratio(rep_p, rep_q, __sigma, True)
+            assert torch.abs(mmd2_pq - __mmd2_pq) < 1.0, (mmd2_pq, __mmd2_pq)
+            assert torch.abs(stat - __stat) < 1.0
+        # end if
         # 4. define the objective-value
         obj = -(torch.log(torch.max(stat, OBJ_VALUE_MIN_THRESHOLD)) if self.opt_log else stat) + reg
 
