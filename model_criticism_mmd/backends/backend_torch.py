@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import typing
 import nptyping
+import random
 from torch.utils.data import Dataset
 from torch import Tensor
 from model_criticism_mmd.logger_unit import logger
@@ -19,10 +20,21 @@ OBJ_VALUE_MIN_THRESHOLD = torch.tensor([1e-6], dtype=torch.float64)
 
 class TwoSampleDataSet(torch.utils.data.Dataset):
     def __init__(self, x: torch.Tensor, y: torch.Tensor):
-        self.x = x
-        self.y = y
         self.length = len(x)
-        assert len(x) == len(y)
+        if len(x) != len(y):
+            logger.info(f'Random selection to set the same size of samples {min(len(x), len(y))}. '
+                        'The MMD implementation expects the same size of samples.')
+            if len(x) < len(y):
+                self.x = x
+                self.y = y[random.sample(range(0, len(y)-1), len(x)), :]
+            else:
+                self.x = x[random.sample(range(0, len(y)-1), len(x)), :]
+                self.y = y
+            # end if
+        else:
+            self.x = x
+            self.y = y
+        # end if
 
     def __getitem__(self, index):
         return self.x[index], self.y[index]
