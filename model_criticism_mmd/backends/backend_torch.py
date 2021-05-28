@@ -28,7 +28,7 @@ class TwoSampleDataSet(torch.utils.data.Dataset):
                 self.x = x
                 self.y = y[random.sample(range(0, len(y)-1), len(x)), :]
             else:
-                self.x = x[random.sample(range(0, len(y)-1), len(x)), :]
+                self.x = x[random.sample(range(0, len(x)-1), len(y)), :]
                 self.y = y
             # end if
         else:
