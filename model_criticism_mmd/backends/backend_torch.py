@@ -9,7 +9,8 @@ from sklearn.metrics.pairwise import euclidean_distances
 from model_criticism_mmd.models import TrainingLog, TrainedMmdParameters, TrainerBase
 from model_criticism_mmd.backends import kernels_torch
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+#device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cpu')
 
 TypeInputData = typing.Union[torch.Tensor, nptyping.NDArray[(typing.Any, typing.Any), typing.Any]]
 TypeScaleVector = nptyping.NDArray[(typing.Any, typing.Any), typing.Any]
