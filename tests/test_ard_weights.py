@@ -1,6 +1,7 @@
 from model_criticism_mmd import ModelTrainerTorchBackend, ModelTrainerTheanoBackend
+from model_criticism_mmd.backends import backend_torch
 import numpy
-
+import torch
 
 """A test to confirm correctness of the algorithm.
 The computed ARD weight has the following structure: 1st index highest, in contract 2nd and 3rd are low value.
@@ -12,6 +13,7 @@ def test_case_ard_weight():
     Only the 1 dimension follows a distribution with wide variance. On the contract, the 2rd and 3rd dimension have similar values.
     Then, the trained ARD weight will be [high, low, low]
     """
+    backend_torch.device = torch.device('cpu')
     size = 100
     n_trial = 2
     n_epoch = 500
@@ -36,7 +38,8 @@ def test_case_ard_weight():
         trained_obj_theano = trainer_theano.train(x, y, num_epochs=n_epoch, batchsize=batch_size, opt_sigma=is_opt_sigma)
 
         trainer_torch = ModelTrainerTorchBackend()
-        trained_obj_torch = trainer_torch.train(x, y, num_epochs=n_epoch, batchsize=batch_size, opt_sigma=is_opt_sigma)
+        trained_obj_torch = trainer_torch.train(x, y, num_epochs=n_epoch, batchsize=batch_size, opt_sigma=is_opt_sigma,
+                                                num_workers=4)
 
         result_stacks.append([
                                  (x, y),

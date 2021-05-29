@@ -10,16 +10,19 @@ from sklearn.metrics.pairwise import euclidean_distances
 from model_criticism_mmd.models import TrainingLog, TrainedMmdParameters, TrainerBase
 from model_criticism_mmd.backends import kernels_torch
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
 TypeInputData = typing.Union[torch.Tensor, nptyping.NDArray[(typing.Any, typing.Any), typing.Any]]
 TypeScaleVector = nptyping.NDArray[(typing.Any, typing.Any), typing.Any]
-
-OBJ_VALUE_MIN_THRESHOLD = torch.tensor([1e-6], dtype=torch.float64)
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+try:
+    torch.multiprocessing.set_start_method('spawn')
+except RuntimeError:
+    pass
 
 
 class TwoSampleDataSet(torch.utils.data.Dataset):
-    def __init__(self, x: torch.Tensor, y: torch.Tensor):
+    def __init__(self,
+                 x: torch.Tensor, y: torch.Tensor,
+                 device_obj: torch.device = device):
         self.length = len(x)
         if len(x) != len(y):
             logger.info(f'Random selection to set the same size of samples {min(len(x), len(y))}. '
@@ -35,9 +38,14 @@ class TwoSampleDataSet(torch.utils.data.Dataset):
             self.x = x
             self.y = y
         # end if
+        self.device_obj = device_obj
 
     def __getitem__(self, index):
-        return self.x[index], self.y[index]
+        x__ = self.x[index]
+        y__ = self.y[index]
+        x__d = x__.to(self.device_obj)
+        y__d = y__.to(self.device_obj)
+        return x__d, y__d
 
     def __len__(self):
         return self.length
@@ -56,77 +64,80 @@ class ScaleLayer(torch.nn.Module):
 # MMD equation
 
 class MMD(object):
-    def __init__(self, kernel_function_obj: kernels_torch.BaseKernel):
+    def __init__(self,
+                 kernel_function_obj: kernels_torch.BaseKernel,
+                 min_var_est: Tensor = torch.tensor([1e-8]),
+                 device_obj: torch.device = device):
         self.kernel_function_obj = kernel_function_obj
+        self.min_var_est: torch.Tensor = min_var_est
+        if device_obj == torch.device('cuda'):
+            self.min_var_est = self.min_var_est.to(device_obj)
+        # end if
+        self.device_obj = device_obj
 
     @staticmethod
-    def _mmd2_and_variance(K_XX: torch.Tensor,
-                           K_XY: torch.Tensor,
-                           K_YY: torch.Tensor, unit_diagonal=False, biased=False):
-        m = K_XX.shape[0]  # Assumes X, Y are same shape
+    def _mmd2_and_variance(k_xx: torch.Tensor,
+                           k_xy: torch.Tensor,
+                           k_yy: torch.Tensor, unit_diagonal=False, biased=False):
+        m = k_xx.shape[0]  # Assumes X, Y are same shape
 
         # Get the various sums of kernels that we'll use
         # Kts drop the diagonal, but we don't need to compute them explicitly
         if unit_diagonal:
-            diag_X = diag_Y = 1
-            sum_diag_X = sum_diag_Y = m
-            sum_diag2_X = sum_diag2_Y = m
+            diag_x = diag_y = 1
+            sum_diag_x = sum_diag_y = m
+            sum_diag2_x = sum_diag2_y = m
         else:
-            diag_X = torch.diagonal(K_XX)
-            diag_Y = torch.diagonal(K_YY)
+            diag_x = torch.diagonal(k_xx)
+            diag_y = torch.diagonal(k_yy)
 
-            sum_diag_X = diag_X.sum()
-            sum_diag_Y = diag_Y.sum()
+            sum_diag_x = diag_x.sum()
+            sum_diag_y = diag_y.sum()
 
-            sum_diag2_X = diag_X.dot(diag_X)
-            sum_diag2_Y = diag_Y.dot(diag_Y)
-
+            sum_diag2_x = diag_x.dot(diag_x)
+            sum_diag2_y = diag_y.dot(diag_y)
+        # end if
         # Kt_XX_sums = K_XX.sum(axis=1) - diag_X
-        Kt_XX_sums = torch.sum(K_XX, dim=1) - diag_X
+        kt_xx_sums = torch.sum(k_xx, dim=1) - diag_x
         # Kt_YY_sums = K_YY.sum(axis=1) - diag_Y
-        Kt_YY_sums = torch.sum(K_YY, dim=1) - diag_Y
+        kt_yy_sums = torch.sum(k_yy, dim=1) - diag_y
         # K_XY_sums_0 = K_XY.sum(axis=0)
-        K_XY_sums_0 = torch.sum(K_XY, dim=0)
+        k_xy_sums_0 = torch.sum(k_xy, dim=0)
         # K_XY_sums_1 = K_XY.sum(axis=1)
-        K_XY_sums_1 = torch.sum(K_XY, dim=1)
+        k_xy_sums_1 = torch.sum(k_xy, dim=1)
 
         # todo maybe, this must be replaced.
-        Kt_XX_sum = Kt_XX_sums.sum()
-        Kt_YY_sum = Kt_YY_sums.sum()
-        K_XY_sum = K_XY_sums_0.sum()
+        kt_xx_sum = kt_xx_sums.sum()
+        kt_yy_sum = kt_yy_sums.sum()
+        k_xy_sum = k_xy_sums_0.sum()
 
         # todo maybe, this must be replaced.
         # should figure out if that's faster or not on GPU / with theano...
-        Kt_XX_2_sum = (K_XX ** 2).sum() - sum_diag2_X
-        Kt_YY_2_sum = (K_YY ** 2).sum() - sum_diag2_Y
-        K_XY_2_sum  = (K_XY ** 2).sum()
+        kt_xx_2_sum = (k_xx ** 2).sum() - sum_diag2_x
+        kt_yy_2_sum = (k_yy ** 2).sum() - sum_diag2_y
+        k_xy_2_sum  = (k_xy ** 2).sum()
 
         if biased:
-            mmd2 = ((Kt_XX_sum + sum_diag_X) / (m * m)
-                  + (Kt_YY_sum + sum_diag_Y) / (m * m)
-                  - 2 * K_XY_sum / (m * m))
+            mmd2 = ((kt_xx_sum + sum_diag_x) / (m * m) + (kt_yy_sum + sum_diag_y) / (m * m)
+                    - 2 * k_xy_sum / (m * m))
         else:
-            mmd2 = (Kt_XX_sum / (m * (m-1))
-                  + Kt_YY_sum / (m * (m-1))
-                  - 2 * K_XY_sum / (m * m))
+            mmd2 = (kt_xx_sum / (m * (m-1)) + kt_yy_sum / (m * (m-1)) - 2 * k_xy_sum / (m * m))
 
         var_est = (
               2 / (m**2 * (m-1)**2) * (
-                  2 * Kt_XX_sums.dot(Kt_XX_sums) - Kt_XX_2_sum
-                + 2 * Kt_YY_sums.dot(Kt_YY_sums) - Kt_YY_2_sum)
-            - (4*m-6) / (m**3 * (m-1)**3) * (Kt_XX_sum**2 + Kt_YY_sum**2)
+                  2 * kt_xx_sums.dot(kt_xx_sums) - kt_xx_2_sum
+                + 2 * kt_yy_sums.dot(kt_yy_sums) - kt_yy_2_sum)
+            - (4*m-6) / (m**3 * (m-1)**3) * (kt_xx_sum**2 + kt_yy_sum**2)
             + 4*(m-2) / (m**3 * (m-1)**2) * (
-                  K_XY_sums_1.dot(K_XY_sums_1)
-                + K_XY_sums_0.dot(K_XY_sums_0))
-            - 4 * (m-3) / (m**3 * (m-1)**2) * K_XY_2_sum
-            - (8*m - 12) / (m**5 * (m-1)) * K_XY_sum**2
+                  k_xy_sums_1.dot(k_xy_sums_1) + k_xy_sums_0.dot(k_xy_sums_0))
+            - 4 * (m-3) / (m**3 * (m-1)**2) * k_xy_2_sum
+            - (8*m - 12) / (m**5 * (m-1)) * k_xy_sum**2
             + 8 / (m**3 * (m-1)) * (
-                  1/m * (Kt_XX_sum + Kt_YY_sum) * K_XY_sum
-                - Kt_XX_sums.dot(K_XY_sums_1)
-                - Kt_YY_sums.dot(K_XY_sums_0))
+                  1/m * (kt_xx_sum + kt_yy_sum) * k_xy_sum
+                - kt_xx_sums.dot(k_xy_sums_1)
+                - kt_yy_sums.dot(k_xy_sums_0))
         )
 
-        # todo return type
         return mmd2, var_est
 
     def _mmd2_and_ratio(self,
@@ -134,12 +145,9 @@ class MMD(object):
                         k_xy: torch.Tensor,
                         k_yy: torch.Tensor,
                         unit_diagonal: bool = False,
-                        biased: bool = False,
-                        min_var_est: torch.Tensor=torch.tensor([1e-8], dtype=torch.float64)
-                        ) -> typing.Tuple[torch.Tensor, torch.Tensor]:
-        # todo what is return variable?
+                        biased: bool = False) -> typing.Tuple[torch.Tensor, torch.Tensor]:
         mmd2, var_est = self._mmd2_and_variance(k_xx, k_xy, k_yy, unit_diagonal=unit_diagonal, biased=biased)
-        ratio = torch.div(mmd2, torch.sqrt(torch.max(var_est, min_var_est)))
+        ratio = torch.div(mmd2, torch.sqrt(torch.max(var_est, self.min_var_est)))
         return mmd2, ratio
 
     def process_mmd2_and_ratio(self, x: torch.Tensor, y: torch.Tensor, biased: bool = True, **kwargs
@@ -159,7 +167,6 @@ class MMD(object):
                            y: torch.Tensor,
                            sigma: torch.Tensor,
                            biased=True):
-        # todo return type
         gamma = 1 / (2 * sigma**2)
 
         # torch.t() is transpose function. torch.dot() is only for vectors. For 2nd tensors, "mm".
@@ -170,8 +177,6 @@ class MMD(object):
         x_sqnorms = torch.diagonal(xx, offset=0)
         y_sqnorms = torch.diagonal(yy, offset=0)
 
-        # todo this part is RBF kernel
-        # torch.exp(-1 * gamma * () is kernel
         k_xy = torch.exp(-1 * gamma * (-2 * xy + x_sqnorms[:, np.newaxis] + y_sqnorms[np.newaxis, :]))
         k_xx = torch.exp(-1 * gamma * (-2 * xx + x_sqnorms[:, np.newaxis] + x_sqnorms[np.newaxis, :]))
         k_yy = torch.exp(-1 * gamma * (-2 * yy + y_sqnorms[:, np.newaxis] + y_sqnorms[np.newaxis, :]))
@@ -183,7 +188,9 @@ class MMD(object):
 
 
 class ModelTrainerTorchBackend(TrainerBase):
-    def __init__(self, kernel_function_obj: kernels_torch.BaseKernel = kernels_torch.RBFKernelFunction()):
+    def __init__(self,
+                 kernel_function_obj: kernels_torch.BaseKernel = kernels_torch.RBFKernelFunction(),
+                 device_obj: torch.device = device):
         self.mmd_metric = MMD(kernel_function_obj)
         self.lr = None
         self.opt_log = None
@@ -191,43 +198,58 @@ class ModelTrainerTorchBackend(TrainerBase):
         self.opt_sigma = None
         self.scales = None
         self.log_sigma = None
+        self.obj_value_min_threshold = torch.tensor([1e-6], device=device_obj)
+        self.device_obj = device_obj
 
-    @staticmethod
-    def init_scales(data: torch.Tensor, init_scale: torch.Tensor) -> torch.Tensor:
+    def init_scales(self, data: torch.Tensor, init_scale: torch.Tensor) -> torch.Tensor:
         # a scale matrix which scales the input matrix X.
         # must be the same size as the input data.
         if init_scale is None:
-            scales: torch.Tensor = torch.rand(size=(data.shape[1],), requires_grad=True)
+            scales: torch.Tensor = torch.rand(size=(data.shape[1],), requires_grad=True,
+                                              device=self.device_obj)
         else:
             logger.info('Set the initial scales value')
             assert data.shape[1] == init_scale.shape[0]
-            scales = torch.tensor(init_scale.clone().detach(), requires_grad=True)
+            scales = torch.tensor(init_scale.clone().detach(), requires_grad=True, device=self.device_obj)
         # end if
-        scales__ = scales.to(device)
-        return scales__
+        return scales
 
     def run_train_epoch(self,
                         optimizer: torch.optim.SGD,
                         dataset: TwoSampleDataSet,
                         batchsize: int,
-                        reg: int) -> typing.Tuple[torch.Tensor, torch.Tensor]:
+                        reg: int,
+                        num_workers: int = 2) -> typing.Tuple[torch.Tensor, torch.Tensor]:
+        """
+
+        :param optimizer:
+        :param dataset:
+        :param batchsize:
+        :param reg:
+        :param num_workers: The number of worker across batches.
+        I advice you to set = 0 if device is GPU and error raises.
+        :return:
+        """
         total_mmd2 = 0
         total_obj = 0
         n_batches = 0
 
-        data_loader = torch.utils.data.DataLoader(dataset, batch_size=batchsize, shuffle=True, num_workers=2)
+        data_loader = torch.utils.data.DataLoader(dataset, batch_size=batchsize, shuffle=True, num_workers=num_workers)
         for xbatch, ybatch in data_loader:
             mmd2_pq, stat, obj = self.forward(xbatch, ybatch, reg=reg)
-            assert np.isfinite(mmd2_pq.detach().numpy())
-            assert np.isfinite(obj.detach().numpy())
+            assert np.isfinite(mmd2_pq.detach().cpu().numpy())
+            assert np.isfinite(obj.detach().cpu().numpy())
             total_mmd2 += mmd2_pq
             total_obj += obj
             n_batches += 1
             # do differentiation now.
             obj.backward()
-            #
             optimizer.step()
             optimizer.zero_grad()
+            if self.device_obj == torch.device('cuda'):
+                del mmd2_pq, obj, stat, xbatch, ybatch
+                torch.cuda.empty_cache()
+            # end if
         # end for
 
         avg_mmd2 = torch.div(total_mmd2, n_batches)
@@ -267,12 +289,12 @@ class ModelTrainerTorchBackend(TrainerBase):
             assert torch.abs(stat - __stat) < 1.0
         # end if
         # 4. define the objective-value
-        obj = -(torch.log(torch.max(stat, OBJ_VALUE_MIN_THRESHOLD)) if self.opt_log else stat) + reg
+        obj = -(torch.log(torch.max(stat, self.obj_value_min_threshold)) if self.opt_log else stat) + reg
 
         return mmd2_pq, stat, obj
 
-    @staticmethod
-    def __init_sigma_median_heuristic(x_train: TypeInputData,
+    def __init_sigma_median_heuristic(self,
+                                      x_train: TypeInputData,
                                       y_train: TypeInputData,
                                       scales: torch.Tensor,
                                       batchsize: int = 1000) -> torch.Tensor:
@@ -281,27 +303,29 @@ class ModelTrainerTorchBackend(TrainerBase):
         logger.info("Getting median initial sigma value...")
         n_samp = min(500, x_train.shape[0], y_train.shape[0])
 
-        samp = torch.cat([
+        samp_np = torch.cat([
             x_train[np.random.choice(x_train.shape[0], n_samp, replace=False)],
             y_train[np.random.choice(y_train.shape[0], n_samp, replace=False)],
         ])
+        samp = torch.tensor(samp_np, device=self.device_obj)
 
         data_loader = torch.utils.data.DataLoader(samp, batch_size=batchsize, shuffle=False)
         reps = torch.cat([torch.mul(batch, scales) for batch in data_loader])
-        np_reps = reps.detach().numpy()
+        np_reps = reps.cpu().detach().numpy()
+        # end if
         d2 = euclidean_distances(np_reps, squared=True)
         med_sqdist = np.median(d2[np.triu_indices_from(d2, k=1)])
         __init_log_simga = np.log(med_sqdist / np.sqrt(2)) / 2
         del samp, reps, d2, med_sqdist
         logger.info("initial sigma by median-heuristics {:.3g}".format(np.exp(__init_log_simga)))
 
-        return torch.tensor(np.array([__init_log_simga]), requires_grad=True)
+        return torch.tensor(np.array([__init_log_simga]), requires_grad=True, device=self.device_obj)
 
-    @staticmethod
-    def to_tensor(data: np.ndarray) -> Tensor:
+    def to_tensor(self, data: np.ndarray) -> Tensor:
         if isinstance(data, np.ndarray):
-            return torch.tensor(data)
+            return torch.tensor(data, device=self.device_obj)
         elif isinstance(data, Tensor):
+            data = data.to(self.device_obj)
             return data
         else:
             raise TypeError()
@@ -329,12 +353,7 @@ class ModelTrainerTorchBackend(TrainerBase):
             x_val__ = self.to_tensor(x_val)
             y_val__ = self.to_tensor(y_val)
         # end if
-        x_train__d = x_train__.to(device)
-        y_train__d = y_train__.to(device)
-        x_val__d = x_val__.to(device)
-        y_val__d = y_val__.to(device)
-
-        return x_train__d, y_train__d, x_val__d, y_val__d
+        return x_train__, y_train__, x_val__.to(self.device_obj), y_val__.to(self.device_obj)
 
     @staticmethod
     def __exp_sigma(sigma: torch.Tensor) -> torch.Tensor:
@@ -346,21 +365,22 @@ class ModelTrainerTorchBackend(TrainerBase):
         if self.init_sigma_median:
             log_sigma = self.__init_sigma_median_heuristic(x_train=x_train__, y_train=y_train__, scales=self.scales)
         elif init_log_sigma is not None:
-            log_sigma: torch.Tensor = torch.tensor([init_log_sigma], requires_grad=True)
+            log_sigma: torch.Tensor = torch.tensor([init_log_sigma], requires_grad=True, device=self.device_obj)
         else:
-            log_sigma: torch.Tensor = torch.rand(size=(1,), requires_grad=True)
+            log_sigma: torch.Tensor = torch.rand(size=(1,), requires_grad=True, device=self.device_obj)
         # end if
-        log_sigma_ = log_sigma.to(device)
 
-        return log_sigma_
+        return log_sigma
 
     def log_message(self, epoch: int, avg_mmd2: Tensor, avg_obj: Tensor, val_mmd2_pq: Tensor, val_obj: Tensor):
         fmt = ("{: >6,}: avg train MMD^2 {} obj {},  "
                "avg val MMD^2 {}  obj {}  elapsed: {:,} sigma: {}")
         if epoch in {0, 5, 25, 50} or epoch % 100 == 0:
             logger.info(
-                fmt.format(epoch, avg_mmd2.detach().numpy(), avg_obj.detach().numpy(), val_mmd2_pq.detach().numpy(),
-                           val_obj.detach().numpy(), 0.0, self.__exp_sigma(self.log_sigma).detach().numpy()))
+                fmt.format(epoch, avg_mmd2.detach().cpu().numpy(),
+                           avg_obj.detach().cpu().numpy(),
+                           val_mmd2_pq.detach().cpu().numpy(),
+                           val_obj.detach().cpu().numpy(), 0.0, self.__exp_sigma(self.log_sigma).detach().cpu().numpy()))
         # end if
 
     def train(self,
@@ -377,8 +397,34 @@ class ModelTrainerTorchBackend(TrainerBase):
               opt_log: bool = True,
               init_sigma_median: bool = True,
               x_val: TypeInputData = None,
-              y_val: TypeInputData = None) -> TrainedMmdParameters:
+              y_val: TypeInputData = None,
+              num_workers: int = 2) -> TrainedMmdParameters:
+        """
+
+        :param x_train:
+        :param y_train:
+        :param num_epochs:
+        :param batchsize:
+        :param ratio_train:
+        :param initial_log_sigma:
+        :param reg:
+        :param initial_scale:
+        :param lr:
+        :param opt_sigma:
+        :param opt_log:
+        :param init_sigma_median:
+        :param x_val:
+        :param y_val:
+        :param num_workers: The number of worker across batches.
+        I advice you to set = 0 if device is GPU and error raises.
+        :return:
+        """
         assert len(x_train.shape) == len(y_train.shape) == 2
+        if self.device_obj == torch.device('cuda'):
+            logger.info(f'Reset number of worker as {torch.cuda.device_count() - 1}')
+            num_workers = torch.cuda.device_count() - 1
+        # end if
+
         logger.debug(f'input data N(sample-size)={x_train.shape[0]}, N(dimension)={x_train.shape[1]}')
         self.lr = lr
         self.opt_sigma = opt_sigma
@@ -401,30 +447,31 @@ class ModelTrainerTorchBackend(TrainerBase):
         dataset_train = TwoSampleDataSet(x_train__, y_train__)
         val_mmd2_pq, val_stat, val_obj = self.forward(x_val__, y_val__, reg=reg)
         logger.debug(
-            f'Validation at 0. MMD^2 = {val_mmd2_pq.detach().numpy()}, obj-value = {val_obj.detach().numpy()} '
-            f'at sigma = {self.__exp_sigma(self.log_sigma).detach().numpy()}')
-        logger.debug(f'[before optimization] sigma value = {self.__exp_sigma(self.log_sigma).detach().numpy()}')
-
+            f'Validation at 0. MMD^2 = {val_mmd2_pq.detach().cpu().numpy()}, obj-value = {val_obj.detach().cpu().numpy()} '
+            f'at sigma = {self.__exp_sigma(self.log_sigma).detach().cpu().numpy()}')
+        logger.debug(f'[before optimization] sigma value = {self.__exp_sigma(self.log_sigma).detach().cpu().numpy()}')
+        # end if
         training_log = []
         for epoch in range(1, num_epochs + 1):
             optimizer.zero_grad()
             avg_mmd2, avg_obj = self.run_train_epoch(optimizer,
                                                      dataset_train,
                                                      batchsize=batchsize,
-                                                     reg=reg)
+                                                     reg=reg,
+                                                     num_workers=num_workers)
             val_mmd2_pq, val_stat, val_obj = self.forward(x_val__, y_val__, reg=reg)
-            training_log.append(TrainingLog(epoch,
-                                            avg_mmd2.detach().numpy(),
-                                            avg_obj.detach().numpy(),
-                                            val_mmd2_pq.detach().numpy(),
-                                            val_obj.detach().numpy(),
-                                            sigma=self.log_sigma.detach().numpy(),
-                                            scales=self.scales.detach().numpy()))
+            training_log.append(TrainingLog(epoch=epoch,
+                                            avg_mmd_training=avg_mmd2.detach().cpu().numpy(),
+                                            avg_obj_train=avg_obj.detach().cpu().numpy(),
+                                            mmd_validation=val_mmd2_pq.detach().cpu().numpy(),
+                                            obj_validation=val_obj.detach().cpu().numpy(),
+                                            sigma=self.log_sigma.detach().cpu().numpy(),
+                                            scales=self.scales.detach().cpu().numpy()))
             self.log_message(epoch, avg_mmd2, avg_obj, val_mmd2_pq, val_obj)
         # end for
         return TrainedMmdParameters(
-            scales=self.scales.detach().numpy(),
-            sigma=torch.exp(self.log_sigma).detach().numpy()[0],
+            scales=self.scales.detach().cpu().numpy(),
+            sigma=torch.exp(self.log_sigma).detach().cpu().numpy()[0],
             training_log=training_log)
 
     def mmd_distance(self, x: TypeInputData, y: TypeInputData,
@@ -432,7 +479,7 @@ class ModelTrainerTorchBackend(TrainerBase):
         assert self.scales is not None, 'run train() first'
         assert self.log_sigma is not None, 'run train() first'
         if sigma is not None:
-            __sigma = torch.tensor([sigma])
+            __sigma = torch.tensor([sigma], device=self.device_obj)
         else:
             __sigma = torch.exp(self.log_sigma)
 
