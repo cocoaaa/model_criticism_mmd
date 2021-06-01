@@ -60,7 +60,6 @@ def test_case_ard_weight():
         weight_array_torch_backend = trial_result[1][1]
         assert weight_array_theano_backend[0] == max(weight_array_theano_backend)
         assert weight_array_torch_backend[0] == max(weight_array_torch_backend)
-        print(weight_array_theano_backend, weight_array_torch_backend)
     # end for
 
 

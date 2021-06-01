@@ -8,6 +8,7 @@ except ImportError:  # new versions just call it shogun
     raise ImportError('shogun package is unavailable. Thus, we skip 2-sample test with MMD.')
 
 
+# todo should use a kernel in training.
 def rbf_mmd_test(x: np.ndarray,
                  y: np.ndarray,
                  trained_params: TrainedMmdParameters,

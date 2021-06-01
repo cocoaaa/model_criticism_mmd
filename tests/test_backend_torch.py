@@ -1,11 +1,10 @@
 import pathlib
 
 import numpy as np
-import typing
 import os
 from pathlib import Path
 
-from model_criticism_mmd.backends.backend_torch import TypeInputData, ModelTrainerTorchBackend
+from model_criticism_mmd.backends.backend_torch import ModelTrainerTorchBackend
 from model_criticism_mmd.logger_unit import logger
 from model_criticism_mmd.supports import distribution_generator
 from model_criticism_mmd.backends.kernels_torch import RBFKernelFunction, MaternKernelFunction
@@ -24,16 +23,19 @@ def test_devel(resource_path_root: Path):
     x_test = array_obj['x_test']
     y_test = array_obj['y_test']
     init_scale = torch.tensor(np.array([0.05, 0.55]))
-    for kernel_function in [MaternKernelFunction(nu=0.5), RBFKernelFunction()]:
-        trainer = ModelTrainerTorchBackend(kernel_function_obj=kernel_function)
-
+    device_obj = torch.device(torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
+    for kernel_function in [MaternKernelFunction(nu=0.5, device_obj=device_obj),
+                            RBFKernelFunction(device_obj=device_obj)]:
+        trainer = ModelTrainerTorchBackend(kernel_function_obj=kernel_function, device_obj=device_obj)
         trained_obj = trainer.train(x_train,
                                     y_train,
                                     num_epochs=num_epochs,
                                     x_val=x_test,
                                     y_val=y_test,
                                     initial_scale=init_scale,
-                                    opt_sigma=True, opt_log=True, init_sigma_median=False)
+                                    opt_sigma=True,
+                                    opt_log=True,
+                                    init_sigma_median=False)
         trained_obj.to_pickle(path_trained_model)
         import math
         logger.info(f'exp(sigma)={math.exp(trained_obj.sigma)} scales={trained_obj.scales}')
@@ -52,9 +54,9 @@ def test_example():
 
     np.random.seed(np.random.randint(2**31))
     x_train, y_train, x_test, y_test = distribution_generator.generate_data(n_train=n_train, n_test=n_test)
+    device_obj = torch.device(torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
 
-    trainer = ModelTrainerTorchBackend()
-
+    trainer = ModelTrainerTorchBackend(device_obj=device_obj)
     trained_obj = trainer.train(x_train,
                                 y_train,
                                 num_epochs=num_epochs,

@@ -22,6 +22,9 @@ class BaseKernel(object):
 
 
 class RBFKernelFunction(BaseKernel):
+    def __init__(self, device_obj: torch.device):
+        super().__init__(device_obj=device_obj)
+
     def compute_kernel_matrix(self,
                               x: torch.Tensor,
                               y: torch.Tensor,
@@ -50,8 +53,10 @@ class MaternKernelFunction(BaseKernel):
                  device_obj: torch.device,
                  nu: float,
                  length_scale: float = 1.0):
-        super(MaternKernelFunction).__init__(device_obj)
+        super().__init__(device_obj=device_obj)
         self.gpy_kernel = MaternKernel(nu=nu, length_scale=length_scale)
+        if device_obj == torch.device('cuda'):
+            self.gpy_kernel = self.gpy_kernel.cuda()
 
     def compute_kernel_matrix(self,
                               x: torch.Tensor,

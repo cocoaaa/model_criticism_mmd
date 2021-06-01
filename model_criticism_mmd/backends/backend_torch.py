@@ -9,8 +9,8 @@ from sklearn.metrics.pairwise import euclidean_distances
 from model_criticism_mmd.models import TrainingLog, TrainedMmdParameters, TrainerBase
 from model_criticism_mmd.backends import kernels_torch
 
-device_default = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-# device_default = torch.device('cpu')
+# device_default = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device_default = torch.device('cpu')
 
 TypeInputData = typing.Union[torch.Tensor, nptyping.NDArray[(typing.Any, typing.Any), typing.Any]]
 TypeScaleVector = nptyping.NDArray[(typing.Any, typing.Any), typing.Any]
@@ -207,12 +207,18 @@ class ModelTrainerTorchBackend(TrainerBase):
                         optimizer: torch.optim.SGD,
                         dataset: TwoSampleDataSet,
                         batchsize: int,
-                        reg: int) -> typing.Tuple[torch.Tensor, torch.Tensor]:
+                        reg: torch.Tensor,
+                        num_workers: int = 2) -> typing.Tuple[torch.Tensor, torch.Tensor]:
         total_mmd2 = 0
         total_obj = 0
         n_batches = 0
 
-        data_loader = torch.utils.data.DataLoader(dataset, batch_size=batchsize, shuffle=True, num_workers=2)
+        if self.device_obj == torch.device('cpu'):
+            data_loader = torch.utils.data.DataLoader(dataset, batch_size=batchsize, shuffle=True,
+                                                      num_workers=num_workers)
+        else:
+            data_loader = torch.utils.data.DataLoader(dataset, batch_size=batchsize, shuffle=True)
+        # end if
         for xbatch, ybatch in data_loader:
             mmd2_pq, stat, obj = self.forward(xbatch, ybatch, reg=reg)
             assert np.isfinite(mmd2_pq.detach().cpu().numpy())
@@ -266,8 +272,9 @@ class ModelTrainerTorchBackend(TrainerBase):
         # for debug
         if isinstance(self.mmd_metric.kernel_function_obj, kernels_torch.RBFKernelFunction):
             __mmd2_pq, __stat = self.mmd_metric.rbf_mmd2_and_ratio(rep_p, rep_q, __sigma, True)
-            assert torch.abs(mmd2_pq - __mmd2_pq) < 1.0, (mmd2_pq, __mmd2_pq)
-            assert torch.abs(stat - __stat) < 1.0
+            assert torch.all(torch.gt(torch.tensor(1.0, device=self.device_obj), torch.abs(mmd2_pq - __mmd2_pq))), \
+                (mmd2_pq, __mmd2_pq)
+            assert torch.all(torch.gt(torch.tensor(1.0, device=self.device_obj), torch.abs(stat - __stat)))
         # end if
         # 4. define the objective-value
         obj = -(torch.log(torch.max(stat, self.obj_value_min_threshold)) if self.opt_log else stat) + reg__
@@ -375,14 +382,15 @@ class ModelTrainerTorchBackend(TrainerBase):
               batchsize: int = 200,
               ratio_train: float = 0.8,
               initial_log_sigma: float = 0.0,
-              reg: int = 0,
+              reg: typing.Optional[torch.Tensor] = None,
               initial_scale: torch.Tensor = None,
               lr: float = 0.01,
               opt_sigma: bool = True,
               opt_log: bool = True,
               init_sigma_median: bool = True,
               x_val: TypeInputData = None,
-              y_val: TypeInputData = None) -> TrainedMmdParameters:
+              y_val: TypeInputData = None,
+              num_workers: int = 4) -> TrainedMmdParameters:
         assert len(x_train.shape) == len(y_train.shape) == 2
         logger.debug(f'input data N(sample-size)={x_train.shape[0]}, N(dimension)={x_train.shape[1]}')
         self.lr = lr
@@ -416,7 +424,8 @@ class ModelTrainerTorchBackend(TrainerBase):
             avg_mmd2, avg_obj = self.run_train_epoch(optimizer,
                                                      dataset_train,
                                                      batchsize=batchsize,
-                                                     reg=reg)
+                                                     reg=reg,
+                                                     num_workers=num_workers)
             val_mmd2_pq, val_stat, val_obj = self.forward(x_val__, y_val__, reg=reg)
             training_log.append(TrainingLog(epoch,
                                             avg_mmd2.detach().cpu().numpy(),
@@ -432,7 +441,9 @@ class ModelTrainerTorchBackend(TrainerBase):
             sigma=torch.exp(self.log_sigma).detach().cpu().numpy()[0],
             training_log=training_log)
 
-    def mmd_distance(self, x: TypeInputData, y: TypeInputData,
+    def mmd_distance(self,
+                     x: TypeInputData,
+                     y: TypeInputData,
                      sigma: typing.Optional[float] = None) -> typing.Tuple[Tensor, Tensor]:
         assert self.scales is not None, 'run train() first'
         assert self.log_sigma is not None, 'run train() first'
@@ -443,6 +454,6 @@ class ModelTrainerTorchBackend(TrainerBase):
 
         x__ = self.to_tensor(x)
         y__ = self.to_tensor(y)
-        rep_p, rep_q = self.operation_scale_product(x__, y__)
+        rep_p, rep_q = self.operation_scale_product(x__.to(self.device_obj), y__.to(self.device_obj))
         mmd2, ratio = self.mmd_metric.rbf_mmd2_and_ratio(rep_p, rep_q, __sigma)
-        return mmd2, ratio
+        return mmd2.cpu(), ratio.cpu()
