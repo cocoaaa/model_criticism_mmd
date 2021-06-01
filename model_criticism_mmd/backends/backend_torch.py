@@ -10,7 +10,7 @@ from model_criticism_mmd.models import TrainingLog, TrainedMmdParameters, Traine
 from model_criticism_mmd.backends import kernels_torch
 
 #device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-device = torch.device('cpu')
+device_default = torch.device('cpu')
 
 TypeInputData = typing.Union[torch.Tensor, nptyping.NDArray[(typing.Any, typing.Any), typing.Any]]
 TypeScaleVector = nptyping.NDArray[(typing.Any, typing.Any), typing.Any]
@@ -45,8 +45,12 @@ class ScaleLayer(torch.nn.Module):
 # MMD equation
 
 class MMD(object):
-    def __init__(self, kernel_function_obj: kernels_torch.BaseKernel):
+    def __init__(self,
+                 kernel_function_obj: kernels_torch.BaseKernel,
+                 device_obj: torch.device = device_default):
         self.kernel_function_obj = kernel_function_obj
+        self.device_obj = device_obj
+        self.min_var_est = torch.tensor([1e-8], dtype=torch.float64, device=device_obj)
 
     @staticmethod
     def _mmd2_and_variance(k_xx: torch.Tensor,
@@ -79,13 +83,10 @@ class MMD(object):
         # K_XY_sums_1 = K_XY.sum(axis=1)
         k_xy_sums_1 = torch.sum(k_xy, dim=1)
 
-        # todo maybe, this must be replaced.
         kt_xx_sum = kt_xx_sums.sum()
         kt_yy_sum = kt_yy_sums.sum()
         k_xy_sum = k_xy_sums_0.sum()
 
-        # todo maybe, this must be replaced.
-        # should figure out if that's faster or not on GPU / with theano...
         kt_xx_2_sum = (k_xx ** 2).sum() - sum_diag2_x
         kt_yy_2_sum = (k_yy ** 2).sum() - sum_diag2_y
         k_xy_2_sum = (k_xy ** 2).sum()
@@ -119,14 +120,22 @@ class MMD(object):
                         k_yy: torch.Tensor,
                         unit_diagonal: bool = False,
                         biased: bool = False,
-                        min_var_est: torch.Tensor=torch.tensor([1e-8], dtype=torch.float64)
+                        min_var_est: typing.Optional[torch.Tensor] = None
                         ) -> typing.Tuple[torch.Tensor, torch.Tensor]:
-        # todo what is return variable?
+        if min_var_est is None:
+            __min_var_est = self.min_var_est
+        else:
+            __min_var_est = min_var_est
+        # end if
         mmd2, var_est = self._mmd2_and_variance(k_xx, k_xy, k_yy, unit_diagonal=unit_diagonal, biased=biased)
-        ratio = torch.div(mmd2, torch.sqrt(torch.max(var_est, min_var_est)))
+        ratio = torch.div(mmd2, torch.sqrt(torch.max(var_est, __min_var_est)))
         return mmd2, ratio
 
-    def process_mmd2_and_ratio(self, x: torch.Tensor, y: torch.Tensor, biased: bool = True, **kwargs
+    def process_mmd2_and_ratio(self,
+                               x: torch.Tensor,
+                               y: torch.Tensor,
+                               biased: bool = True,
+                               **kwargs
                                ) -> typing.Tuple[torch.Tensor, torch.Tensor]:
         if isinstance(self.kernel_function_obj, kernels_torch.MaternKernelFunction):
             kernel_matrix_obj = self.kernel_function_obj.compute_kernel_matrix(x, y)
@@ -167,17 +176,23 @@ class MMD(object):
 
 
 class ModelTrainerTorchBackend(TrainerBase):
-    def __init__(self, kernel_function_obj: kernels_torch.BaseKernel = kernels_torch.RBFKernelFunction()):
-        self.mmd_metric = MMD(kernel_function_obj)
+    def __init__(self,
+                 kernel_function_obj: typing.Optional[kernels_torch.BaseKernel] = None,
+                 device_obj: torch.device = device_default):
+        if kernel_function_obj is None:
+            self.mmd_metric = MMD(kernels_torch.RBFKernelFunction(device_obj), device_obj=device_obj)
+        else:
+            self.mmd_metric = MMD(kernel_function_obj, device_obj=device_obj)
+        # end if
         self.lr = None
         self.opt_log = None
         self.init_sigma_median = None
         self.opt_sigma = None
         self.scales = None
         self.log_sigma = None
+        self.device_obj = device_obj
 
-    @staticmethod
-    def init_scales(data: torch.Tensor, init_scale: torch.Tensor) -> torch.Tensor:
+    def init_scales(self, data: torch.Tensor, init_scale: torch.Tensor) -> torch.Tensor:
         # a scale matrix which scales the input matrix X.
         # must be the same size as the input data.
         if init_scale is None:
@@ -187,7 +202,7 @@ class ModelTrainerTorchBackend(TrainerBase):
             assert data.shape[1] == init_scale.shape[0]
             scales = torch.tensor(init_scale.clone().detach(), requires_grad=True)
         # end if
-        scales__ = scales.to(device)
+        scales__ = scales.to(self.device_obj)
         return scales__
 
     def run_train_epoch(self,
@@ -313,10 +328,10 @@ class ModelTrainerTorchBackend(TrainerBase):
             x_val__ = self.to_tensor(x_val)
             y_val__ = self.to_tensor(y_val)
         # end if
-        x_train__d = x_train__.to(device)
-        y_train__d = y_train__.to(device)
-        x_val__d = x_val__.to(device)
-        y_val__d = y_val__.to(device)
+        x_train__d = x_train__.to(self.device_obj)
+        y_train__d = y_train__.to(self.device_obj)
+        x_val__d = x_val__.to(self.device_obj)
+        y_val__d = y_val__.to(self.device_obj)
 
         return x_train__d, y_train__d, x_val__d, y_val__d
 
@@ -334,13 +349,12 @@ class ModelTrainerTorchBackend(TrainerBase):
         else:
             log_sigma: torch.Tensor = torch.rand(size=(1,), requires_grad=True)
         # end if
-        log_sigma_ = log_sigma.to(device)
+        log_sigma_ = log_sigma.to(self.device_obj)
 
         return log_sigma_
 
     def log_message(self, epoch: int, avg_mmd2: Tensor, avg_obj: Tensor, val_mmd2_pq: Tensor, val_obj: Tensor):
-        fmt = ("{: >6,}: avg train MMD^2 {} obj {},  "
-               "avg val MMD^2 {}  obj {}  elapsed: {:,} sigma: {}")
+        fmt = ("{: >6,}: avg train MMD^2 {} obj {},  avg val MMD^2 {}  obj {}  elapsed: {:,} sigma: {}")
         if epoch in {0, 5, 25, 50} or epoch % 100 == 0:
             logger.info(
                 fmt.format(epoch, avg_mmd2.detach().numpy(), avg_obj.detach().numpy(), val_mmd2_pq.detach().numpy(),

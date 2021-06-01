@@ -14,6 +14,9 @@ class KernelMatrixObject(object):
 
 
 class BaseKernel(object):
+    def __init__(self, device_obj: torch.device):
+        self.device_obj = device_obj
+
     def compute_kernel_matrix(self, x: torch.Tensor, y: torch.Tensor, **kwargs) -> KernelMatrixObject:
         raise NotImplementedError()
 
@@ -44,8 +47,10 @@ class RBFKernelFunction(BaseKernel):
 
 class MaternKernelFunction(BaseKernel):
     def __init__(self,
+                 device_obj: torch.device,
                  nu: float,
                  length_scale: float = 1.0):
+        super(MaternKernelFunction).__init__(device_obj)
         self.gpy_kernel = MaternKernel(nu=nu, length_scale=length_scale)
 
     def compute_kernel_matrix(self,
