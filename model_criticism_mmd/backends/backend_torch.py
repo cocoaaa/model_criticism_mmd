@@ -49,73 +49,68 @@ class MMD(object):
         self.kernel_function_obj = kernel_function_obj
 
     @staticmethod
-    def _mmd2_and_variance(K_XX: torch.Tensor,
-                           K_XY: torch.Tensor,
-                           K_YY: torch.Tensor, unit_diagonal=False, biased=False):
-        m = K_XX.shape[0]  # Assumes X, Y are same shape
+    def _mmd2_and_variance(k_xx: torch.Tensor,
+                           k_xy: torch.Tensor,
+                           k_yy: torch.Tensor, unit_diagonal=False, biased=False):
+        m = k_xx.shape[0]  # Assumes X, Y are same shape
 
         # Get the various sums of kernels that we'll use
         # Kts drop the diagonal, but we don't need to compute them explicitly
         if unit_diagonal:
-            diag_X = diag_Y = 1
-            sum_diag_X = sum_diag_Y = m
-            sum_diag2_X = sum_diag2_Y = m
+            diag_x = diag_y = 1
+            sum_diag_x = sum_diag_y = m
+            sum_diag2_x = sum_diag2_y = m
         else:
-            diag_X = torch.diagonal(K_XX)
-            diag_Y = torch.diagonal(K_YY)
+            diag_x = torch.diagonal(k_xx)
+            diag_y = torch.diagonal(k_yy)
 
-            sum_diag_X = diag_X.sum()
-            sum_diag_Y = diag_Y.sum()
+            sum_diag_x = diag_x.sum()
+            sum_diag_y = diag_y.sum()
 
-            sum_diag2_X = diag_X.dot(diag_X)
-            sum_diag2_Y = diag_Y.dot(diag_Y)
-
+            sum_diag2_x = diag_x.dot(diag_x)
+            sum_diag2_y = diag_y.dot(diag_y)
+        # end if
         # Kt_XX_sums = K_XX.sum(axis=1) - diag_X
-        Kt_XX_sums = torch.sum(K_XX, dim=1) - diag_X
+        kt_xx_sums = torch.sum(k_xx, dim=1) - diag_x
         # Kt_YY_sums = K_YY.sum(axis=1) - diag_Y
-        Kt_YY_sums = torch.sum(K_YY, dim=1) - diag_Y
+        kt_yy_sums = torch.sum(k_yy, dim=1) - diag_y
         # K_XY_sums_0 = K_XY.sum(axis=0)
-        K_XY_sums_0 = torch.sum(K_XY, dim=0)
+        k_xy_sums_0 = torch.sum(k_xy, dim=0)
         # K_XY_sums_1 = K_XY.sum(axis=1)
-        K_XY_sums_1 = torch.sum(K_XY, dim=1)
+        k_xy_sums_1 = torch.sum(k_xy, dim=1)
 
         # todo maybe, this must be replaced.
-        Kt_XX_sum = Kt_XX_sums.sum()
-        Kt_YY_sum = Kt_YY_sums.sum()
-        K_XY_sum = K_XY_sums_0.sum()
+        kt_xx_sum = kt_xx_sums.sum()
+        kt_yy_sum = kt_yy_sums.sum()
+        k_xy_sum = k_xy_sums_0.sum()
 
         # todo maybe, this must be replaced.
         # should figure out if that's faster or not on GPU / with theano...
-        Kt_XX_2_sum = (K_XX ** 2).sum() - sum_diag2_X
-        Kt_YY_2_sum = (K_YY ** 2).sum() - sum_diag2_Y
-        K_XY_2_sum  = (K_XY ** 2).sum()
+        kt_xx_2_sum = (k_xx ** 2).sum() - sum_diag2_x
+        kt_yy_2_sum = (k_yy ** 2).sum() - sum_diag2_y
+        k_xy_2_sum = (k_xy ** 2).sum()
 
         if biased:
-            mmd2 = ((Kt_XX_sum + sum_diag_X) / (m * m)
-                  + (Kt_YY_sum + sum_diag_Y) / (m * m)
-                  - 2 * K_XY_sum / (m * m))
+            mmd2 = ((kt_xx_sum + sum_diag_x) / (m * m) + (kt_yy_sum + sum_diag_y) / (m * m)
+                    - 2 * k_xy_sum / (m * m))
         else:
-            mmd2 = (Kt_XX_sum / (m * (m-1))
-                  + Kt_YY_sum / (m * (m-1))
-                  - 2 * K_XY_sum / (m * m))
+            mmd2 = (kt_xx_sum / (m * (m-1)) + kt_yy_sum / (m * (m-1)) - 2 * k_xy_sum / (m * m))
 
         var_est = (
               2 / (m**2 * (m-1)**2) * (
-                  2 * Kt_XX_sums.dot(Kt_XX_sums) - Kt_XX_2_sum
-                + 2 * Kt_YY_sums.dot(Kt_YY_sums) - Kt_YY_2_sum)
-            - (4*m-6) / (m**3 * (m-1)**3) * (Kt_XX_sum**2 + Kt_YY_sum**2)
-            + 4*(m-2) / (m**3 * (m-1)**2) * (
-                  K_XY_sums_1.dot(K_XY_sums_1)
-                + K_XY_sums_0.dot(K_XY_sums_0))
-            - 4 * (m-3) / (m**3 * (m-1)**2) * K_XY_2_sum
-            - (8*m - 12) / (m**5 * (m-1)) * K_XY_sum**2
-            + 8 / (m**3 * (m-1)) * (
-                  1/m * (Kt_XX_sum + Kt_YY_sum) * K_XY_sum
-                - Kt_XX_sums.dot(K_XY_sums_1)
-                - Kt_YY_sums.dot(K_XY_sums_0))
+                  2 * kt_xx_sums.dot(kt_xx_sums) - kt_xx_2_sum
+                  + 2 * kt_yy_sums.dot(kt_yy_sums) - kt_yy_2_sum)
+              - (4*m-6) / (m**3 * (m-1)**3) * (kt_xx_sum**2 + kt_yy_sum**2)
+              + 4*(m-2) / (m**3 * (m-1)**2) * (
+                  k_xy_sums_1.dot(k_xy_sums_1) + k_xy_sums_0.dot(k_xy_sums_0))
+              - 4 * (m-3) / (m**3 * (m-1)**2) * k_xy_2_sum
+              - (8*m - 12) / (m**5 * (m-1)) * k_xy_sum**2
+              + 8 / (m**3 * (m-1)) * (
+                  1/m * (kt_xx_sum + kt_yy_sum) * k_xy_sum
+                  - kt_xx_sums.dot(k_xy_sums_1)
+                  - kt_yy_sums.dot(k_xy_sums_0))
         )
 
-        # todo return type
         return mmd2, var_est
 
     def _mmd2_and_ratio(self,

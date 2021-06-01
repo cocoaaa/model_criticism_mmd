@@ -15,7 +15,7 @@ def test_case_ard_weight():
     Then, the trained ARD weight will be [high, low, low]
     """
     size = 100
-    n_trial = 5
+    n_trial = 2
     n_epoch = 500
     batch_size = 200
     is_opt_sigma = False
