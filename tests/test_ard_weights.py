@@ -22,6 +22,7 @@ def test_case_ard_weight():
 
     result_stacks = []
     init_scales = numpy.array([0.1, 0.1, 0.1])
+    device_obj = torch.device(torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
     for i_trial in range(0, n_trial):
         x_1st_dim = numpy.random.normal(loc=1.0, scale=0.0, size=size)
         y_1st_dim = numpy.random.normal(loc=1.0, scale=50.0, size=size)
@@ -42,7 +43,7 @@ def test_case_ard_weight():
                                                   opt_sigma=is_opt_sigma,
                                                   init_scales=init_scales)
 
-        trainer_torch = ModelTrainerTorchBackend()
+        trainer_torch = ModelTrainerTorchBackend(device_obj=device_obj)
         trained_obj_torch = trainer_torch.train(x, y,
                                                 num_epochs=n_epoch,
                                                 batchsize=batch_size,

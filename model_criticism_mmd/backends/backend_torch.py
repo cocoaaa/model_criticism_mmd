@@ -9,7 +9,6 @@ from sklearn.metrics.pairwise import euclidean_distances
 from model_criticism_mmd.models import TrainingLog, TrainedMmdParameters, TrainerBase
 from model_criticism_mmd.backends import kernels_torch
 
-# device_default = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 device_default = torch.device('cpu')
 
 TypeInputData = typing.Union[torch.Tensor, nptyping.NDArray[(typing.Any, typing.Any), typing.Any]]
@@ -181,7 +180,7 @@ class ModelTrainerTorchBackend(TrainerBase):
         else:
             self.mmd_metric = MMD(kernel_function_obj, device_obj=device_obj)
         # end if
-        self.lr = None
+        self.lr: typing.Optional[float] = None
         self.opt_log = None
         self.init_sigma_median = None
         self.opt_sigma = None
@@ -190,6 +189,16 @@ class ModelTrainerTorchBackend(TrainerBase):
         self.device_obj = device_obj
         self.obj_value_min_threshold = torch.tensor([1e-6], device=self.device_obj)
         self.default_reg = torch.tensor([0], device=self.device_obj)
+
+    @classmethod
+    def model_from_trained(cls,
+                           parameter_obj: TrainedMmdParameters,
+                           device_obj: torch.device = device_default) -> "ModelTrainerTorchBackend":
+        """returns ModelTrainerTorchBackend instance from the trained-parameters."""
+        model_obj = cls(kernel_function_obj=parameter_obj.kernel_function_obj, device_obj=device_obj)
+        model_obj.scales = torch.tensor(parameter_obj.scales, device=device_obj)
+        model_obj.log_sigma = torch.log(torch.tensor(parameter_obj.sigma, device=device_obj))
+        return model_obj
 
     def init_scales(self, data: torch.Tensor, init_scale: torch.Tensor) -> torch.Tensor:
         # a scale matrix which scales the input matrix X.
@@ -439,7 +448,8 @@ class ModelTrainerTorchBackend(TrainerBase):
         return TrainedMmdParameters(
             scales=self.scales.detach().cpu().numpy(),
             sigma=torch.exp(self.log_sigma).detach().cpu().numpy()[0],
-            training_log=training_log)
+            training_log=training_log,
+            kernel_function_obj=self.mmd_metric.kernel_function_obj)
 
     def mmd_distance(self,
                      x: TypeInputData,
@@ -456,4 +466,5 @@ class ModelTrainerTorchBackend(TrainerBase):
         y__ = self.to_tensor(y)
         rep_p, rep_q = self.operation_scale_product(x__.to(self.device_obj), y__.to(self.device_obj))
         mmd2, ratio = self.mmd_metric.rbf_mmd2_and_ratio(rep_p, rep_q, __sigma)
-        return mmd2.cpu(), ratio.cpu()
+        return mmd2.cpu().detach(), ratio.cpu().detach()
+

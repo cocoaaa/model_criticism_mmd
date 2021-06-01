@@ -1,4 +1,5 @@
 from model_criticism_mmd.logger_unit import logger
+from model_criticism_mmd.backends.kernels_torch import BaseKernel
 import dataclasses
 import numpy as np
 import typing
@@ -25,6 +26,7 @@ class TrainedMmdParameters(object):
     training_log: typing.List[TrainingLog]
     x_train: typing.Optional[nptyping.NDArray[(typing.Any, typing.Any), typing.Any]] = None
     y_train: typing.Optional[nptyping.NDArray[(typing.Any, typing.Any), typing.Any]] = None
+    kernel_function_obj: BaseKernel = None
     func_mapping_network: typing.Any = None
 
     def to_npz(self, path_npz: str):

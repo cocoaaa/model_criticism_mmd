@@ -1,6 +1,7 @@
 import numpy as np
 from sklearn.metrics.pairwise import euclidean_distances
 from model_criticism_mmd.models import TrainedMmdParameters
+from model_criticism_mmd.backends.kernels_torch import RBFKernelFunction
 
 try:
     import shogun as sg
@@ -8,7 +9,6 @@ except ImportError:  # new versions just call it shogun
     raise ImportError('shogun package is unavailable. Thus, we skip 2-sample test with MMD.')
 
 
-# todo should use a kernel in training.
 def rbf_mmd_test(x: np.ndarray,
                  y: np.ndarray,
                  trained_params: TrainedMmdParameters,
@@ -60,6 +60,9 @@ def rbf_mmd_test(x: np.ndarray,
     else:
         sigma = trained_params.sigma
         kernel_width = 2 * sigma**2
+    # end if
+    if not isinstance(trained_params.kernel_function_obj, RBFKernelFunction):
+        raise NotImplementedError('Currently, this function supports only RBFKernelFunction')
     # end if
 
     # as a function z. z: R^n -> R^n
