@@ -43,6 +43,7 @@ def test_devel(resource_path_root: Path):
             os.remove(path_trained_model)
         # end if
 
+
 def test_example():
     n_train = 1500
     n_test = 500
