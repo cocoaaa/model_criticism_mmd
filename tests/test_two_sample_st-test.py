@@ -19,9 +19,11 @@ def test_two_sample_sttest():
                                 num_epochs=num_epochs,
                                 batchsize=200,
                                 opt_sigma=True, opt_log=True, init_sigma_median=False)
-    p_val, stat, samps = mmd_two_sample_test.rbf_mmd_test(x=x_test, y=y_test,
-                                                          trained_params=trained_obj, bandwidth='trained')
+
+    p_val, stat, samps = mmd_two_sample_test.rbf_mmd_test(x=x_test, y=y_test, trained_params=trained_obj,
+                                                          bandwidth='trained')
     logger.info(f'p-val: {p_val}')
+
 
 if __name__ == '__main__':
     test_two_sample_sttest()
