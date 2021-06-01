@@ -1,7 +1,8 @@
-from model_criticism_mmd import ModelTrainerTorchBackend, ModelTrainerTheanoBackend
-from model_criticism_mmd.backends import backend_torch
-import numpy
 import torch
+
+from model_criticism_mmd import ModelTrainerTorchBackend, ModelTrainerTheanoBackend
+import numpy
+
 
 """A test to confirm correctness of the algorithm.
 The computed ARD weight has the following structure: 1st index highest, in contract 2nd and 3rd are low value.
@@ -13,7 +14,6 @@ def test_case_ard_weight():
     Only the 1 dimension follows a distribution with wide variance. On the contract, the 2rd and 3rd dimension have similar values.
     Then, the trained ARD weight will be [high, low, low]
     """
-    backend_torch.device = torch.device('cpu')
     size = 100
     n_trial = 2
     n_epoch = 500
@@ -21,6 +21,8 @@ def test_case_ard_weight():
     is_opt_sigma = False
 
     result_stacks = []
+    init_scales = numpy.array([0.1, 0.1, 0.1])
+    device_obj = torch.device(torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
     for i_trial in range(0, n_trial):
         x_1st_dim = numpy.random.normal(loc=1.0, scale=0.0, size=size)
         y_1st_dim = numpy.random.normal(loc=1.0, scale=50.0, size=size)
@@ -35,11 +37,18 @@ def test_case_ard_weight():
             print(f'{n_dim+1} dim. mean(x)={x[:,n_dim].mean()} mean(y)={y[:,n_dim].mean()} var(x)={x[:,n_dim].var()} var(y)={y[:,n_dim].var()}')
         # end for
         trainer_theano = ModelTrainerTheanoBackend()
-        trained_obj_theano = trainer_theano.train(x, y, num_epochs=n_epoch, batchsize=batch_size, opt_sigma=is_opt_sigma)
+        trained_obj_theano = trainer_theano.train(x, y,
+                                                  num_epochs=n_epoch,
+                                                  batchsize=batch_size,
+                                                  opt_sigma=is_opt_sigma,
+                                                  init_scales=init_scales)
 
-        trainer_torch = ModelTrainerTorchBackend()
-        trained_obj_torch = trainer_torch.train(x, y, num_epochs=n_epoch, batchsize=batch_size, opt_sigma=is_opt_sigma,
-                                                num_workers=4)
+        trainer_torch = ModelTrainerTorchBackend(device_obj=device_obj)
+        trained_obj_torch = trainer_torch.train(x, y,
+                                                num_epochs=n_epoch,
+                                                batchsize=batch_size,
+                                                opt_sigma=is_opt_sigma,
+                                                initial_scale=torch.tensor(init_scales))
 
         result_stacks.append([
                                  (x, y),
@@ -48,15 +57,6 @@ def test_case_ard_weight():
         ])
     # end for
     for i_trial, trial_result in enumerate(result_stacks):
-        print(f'At trial number = {i_trial}')
-        x = trial_result[0][0]
-        y = trial_result[0][1]
-        for n_dim in [0, 1, 2]:
-            print(f'{n_dim+1} dim. mean(x)={x[:,n_dim].mean()} mean(y)={y[:,n_dim].mean()} var(x)={x[:,n_dim].var()} var(y)={y[:,n_dim].var()}')
-        # end for
-        # __df_print = pandas.DataFrame([trial_result[1][0], trial_result[1][1]])
-        # __df_print.index = ['scales-theano', 'trainer-torch']
-
         weight_array_theano_backend = trial_result[1][0]
         weight_array_torch_backend = trial_result[1][1]
         assert weight_array_theano_backend[0] == max(weight_array_theano_backend)

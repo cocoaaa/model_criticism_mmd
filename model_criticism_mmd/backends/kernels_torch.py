@@ -5,8 +5,6 @@ from typing import Union
 from gpytorch.lazy import LazyEvaluatedKernelTensor
 from gpytorch.kernels.matern_kernel import MaternKernel
 
-default_device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
 
 @dataclasses.dataclass
 class KernelMatrixObject(object):
@@ -16,11 +14,17 @@ class KernelMatrixObject(object):
 
 
 class BaseKernel(object):
+    def __init__(self, device_obj: torch.device):
+        self.device_obj = device_obj
+
     def compute_kernel_matrix(self, x: torch.Tensor, y: torch.Tensor, **kwargs) -> KernelMatrixObject:
         raise NotImplementedError()
 
 
 class RBFKernelFunction(BaseKernel):
+    def __init__(self, device_obj: torch.device):
+        super().__init__(device_obj=device_obj)
+
     def compute_kernel_matrix(self,
                               x: torch.Tensor,
                               y: torch.Tensor,
@@ -46,14 +50,13 @@ class RBFKernelFunction(BaseKernel):
 
 class MaternKernelFunction(BaseKernel):
     def __init__(self,
+                 device_obj: torch.device,
                  nu: float,
-                 length_scale: float = 1.0,
-                 device_obj: torch.device = default_device):
-        self.device_obj = device_obj
+                 length_scale: float = 1.0):
+        super().__init__(device_obj=device_obj)
         self.gpy_kernel = MaternKernel(nu=nu, length_scale=length_scale)
         if device_obj == torch.device('cuda'):
             self.gpy_kernel = self.gpy_kernel.cuda()
-        # end if
 
     def compute_kernel_matrix(self,
                               x: torch.Tensor,
