@@ -1,3 +1,4 @@
+import numpy
 import numpy as np
 import torch
 import typing
@@ -187,7 +188,9 @@ class MMD(object):
             assert len(self.scales) == x.shape[1] == y.shape[1],\
             f'Error at scales vector. Dimension size does not match. ' \
             f'The given scales {len(self.scales)}dims. x {x.shape[1]}dims. y {y.shape[1]}dims.'
-            rep_x, rep_y = self.operation_scale_product(self.scales, x, y)
+            __x = torch.tensor(x) if isinstance(x, numpy.ndarray) else x
+            __y = torch.tensor(y) if isinstance(x, numpy.ndarray) else y
+            rep_x, rep_y = self.operation_scale_product(self.scales, __x, __y)
         else:
             rep_x, rep_y = x, y
         # end if
@@ -302,7 +305,7 @@ class ModelTrainerTorchBackend(TrainerBase):
         mmd2_pq, stat = self.mmd_estimator.mmd_distance(input_p, input_q)
         # 2. define the objective-value
         obj = -(torch.log(torch.max(stat, self.obj_value_min_threshold)) if opt_log else stat) + reg__
-
+        obj.requires_grad = True
         return mmd2_pq, stat, obj
 
     # def __init_sigma_median_heuristic(self,
@@ -369,11 +372,6 @@ class ModelTrainerTorchBackend(TrainerBase):
         y_val__d = y_val__.to(self.device_obj)
 
         return x_train__d, y_train__d, x_val__d, y_val__d
-
-    @staticmethod
-    def __exp_sigma(sigma: torch.Tensor) -> torch.Tensor:
-        __sigma = torch.exp(sigma)
-        return __sigma
 
     # def init_sigma(self, x_train__, y_train__, init_log_sigma: float = None):
     #     # global sigma value of RBF kernel

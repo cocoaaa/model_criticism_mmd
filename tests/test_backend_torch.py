@@ -36,7 +36,7 @@ def test_devel(resource_path_root: Path):
                                     opt_log=False)
         trained_obj.to_pickle(path_trained_model)
         import math
-        logger.info(f'exp(sigma)={math.exp(trained_obj.sigma)} scales={trained_obj.scales}')
+        logger.info(f'scales={trained_obj.scales}')
         if isinstance(kernel_function, BasicRBFKernelFunction):
             assert 0.0 < math.exp(trained_obj.kernel_function_obj.get_params(False)['sigma']) < 1.5
             os.remove(path_trained_model)
