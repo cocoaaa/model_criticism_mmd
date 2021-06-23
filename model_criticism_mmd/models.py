@@ -1,11 +1,13 @@
 from model_criticism_mmd.logger_unit import logger
 from model_criticism_mmd.backends.kernels_torch import BaseKernel
+import collections
 import dataclasses
 import numpy as np
 import typing
 import nptyping
 import os
 import pickle
+import torch
 
 
 @dataclasses.dataclass
@@ -15,17 +17,17 @@ class TrainingLog(object):
     avg_obj_train: float
     mmd_validation: float
     obj_validation: float
-    sigma: float
+    sigma: typing.Optional[float]
     scales: nptyping.NDArray[(typing.Any,), typing.Any]
 
 
 @dataclasses.dataclass
 class TrainedMmdParameters(object):
-    sigma: np.float
     scales: nptyping.NDArray[(typing.Any, typing.Any), typing.Any]
     training_log: typing.List[TrainingLog]
     x_train: typing.Optional[nptyping.NDArray[(typing.Any, typing.Any), typing.Any]] = None
     y_train: typing.Optional[nptyping.NDArray[(typing.Any, typing.Any), typing.Any]] = None
+    sigma: typing.Optional[np.float] = None
     kernel_function_obj: BaseKernel = None
     func_mapping_network: typing.Any = None
 
@@ -49,3 +51,8 @@ class TrainerBase(object):
 
     def mmd_distance(self, **kwargs):
         raise NotImplementedError()
+
+
+MmdValues = collections.namedtuple('MmdValues', ('mmd', 'ratio'))
+TypeInputData = typing.Union[torch.Tensor, nptyping.NDArray[(typing.Any, typing.Any), typing.Any]]
+TypeScaleVector = nptyping.NDArray[(typing.Any, typing.Any), typing.Any]
