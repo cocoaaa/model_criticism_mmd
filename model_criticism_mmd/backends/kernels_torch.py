@@ -36,18 +36,18 @@ class BasicRBFKernelFunction(BaseKernel):
     """
     def __init__(self,
                  device_obj: torch.device,
-                 sigma: Union[float, torch.Tensor],
+                 log_sigma: Union[float, torch.Tensor],
                  opt_sigma: bool = False):
         """
         Args:
             device_obj: torch.device object.
-            sigma: sigma parameter of RBF kernel
+            log_sigma: sigma parameter of RBF kernel
             opt_sigma: if True, then sigma parameter will be optimized during training. False, not.
         """
         super().__init__(device_obj=device_obj)
         self.device_obj = device_obj
         self.opt_sigma = opt_sigma
-        self.sigma = torch.tensor(np.array([sigma]), requires_grad=opt_sigma, device=device_obj)
+        self.log_sigma = torch.tensor(np.array([log_sigma]), requires_grad=opt_sigma, device=device_obj)
 
     @classmethod
     def init_with_median(cls,
@@ -82,16 +82,17 @@ class BasicRBFKernelFunction(BaseKernel):
         logger.info("initial sigma by median-heuristics {:.3g}".format(np.exp(__init_log_simga)))
         return cls(
             device_obj=device_obj,
-            sigma=__init_log_simga,
+            log_sigma=__init_log_simga,
             opt_sigma=opt_sigma)
 
     def compute_kernel_matrix(self,
                               x: torch.Tensor,
                               y: torch.Tensor,
-                              sigma: torch.Tensor = None) -> KernelMatrixObject:
-        if sigma is None:
-            sigma = self.sigma
+                              log_sigma: torch.Tensor = None) -> KernelMatrixObject:
+        if log_sigma is None:
+            log_sigma = self.log_sigma
         # end if
+        sigma = torch.exp(log_sigma)
         gamma = torch.div(1, (2 * torch.pow(sigma, 2)))
 
         # torch.t() is transpose function. torch.dot() is only for vectors. For 2nd tensors, "mm".
@@ -110,9 +111,11 @@ class BasicRBFKernelFunction(BaseKernel):
 
     def get_params(self, is_grad_param_only: bool = False) -> typing.Dict[str, FloatOrTensor]:
         if is_grad_param_only and self.opt_sigma:
-            __ = {'sigma': self.sigma}
-        else:
+            __ = {'log_sigma': self.log_sigma}
+        elif is_grad_param_only and self.opt_sigma is False:
             __ = {}
+        else:
+            __ = {'log_sigma': self.log_sigma}
         # end if
         return __
 

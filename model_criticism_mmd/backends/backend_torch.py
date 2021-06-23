@@ -130,7 +130,6 @@ class MMD(object):
     def process_mmd2_and_ratio(self,
                                x: torch.Tensor,
                                y: torch.Tensor,
-                               biased: bool = True,
                                **kwargs
                                ) -> typing.Tuple[torch.Tensor, torch.Tensor]:
         """Computes MMD value.
@@ -177,6 +176,7 @@ class MMD(object):
     def mmd_distance(self,
                      x: TypeInputData,
                      y: TypeInputData,
+                     is_detach: bool = False,
                      **kwargs) -> MmdValues:
         """Computes MMD value.
 
@@ -195,7 +195,10 @@ class MMD(object):
             rep_x, rep_y = x, y
         # end if
         mmd2, ratio = self.process_mmd2_and_ratio(rep_x, rep_y)
-        return MmdValues(mmd2.cpu().detach(), ratio.cpu().detach())
+        if is_detach:
+            return MmdValues(mmd2.cpu().detach(), ratio.cpu().detach())
+        else:
+            return MmdValues(mmd2, ratio)
 
 
 # ----------------------------------------------------------------------
@@ -305,7 +308,6 @@ class ModelTrainerTorchBackend(TrainerBase):
         mmd2_pq, stat = self.mmd_estimator.mmd_distance(input_p, input_q)
         # 2. define the objective-value
         obj = -(torch.log(torch.max(stat, self.obj_value_min_threshold)) if opt_log else stat) + reg__
-        obj.requires_grad = True
         return mmd2_pq, stat, obj
 
     # def __init_sigma_median_heuristic(self,
@@ -479,5 +481,6 @@ class ModelTrainerTorchBackend(TrainerBase):
 
     def mmd_distance(self,
                      x: TypeInputData,
-                     y: TypeInputData) -> MmdValues:
-        return self.mmd_estimator.mmd_distance(x, y)
+                     y: TypeInputData,
+                     is_detach: bool = False) -> MmdValues:
+        return self.mmd_estimator.mmd_distance(x, y, is_detach)
