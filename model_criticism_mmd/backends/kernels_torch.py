@@ -47,7 +47,7 @@ class BasicRBFKernelFunction(BaseKernel):
         super().__init__(device_obj=device_obj)
         self.device_obj = device_obj
         self.opt_sigma = opt_sigma
-        self.log_sigma = torch.tensor(np.array([log_sigma]), requires_grad=opt_sigma, device=device_obj)
+        self.log_sigma = torch.tensor([log_sigma], requires_grad=opt_sigma, device=device_obj)
 
     @classmethod
     def init_with_median(cls,

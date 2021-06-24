@@ -448,7 +448,6 @@ class ModelTrainerTorchBackend(TrainerBase):
         kernel_params_target = self.mmd_estimator.kernel_function_obj.get_params(is_grad_param_only=True)
         params_target = [self.scales] + list(kernel_params_target.values())
         optimizer = torch.optim.SGD(params_target, lr=lr, momentum=0.9, nesterov=True)
-
         # procedure of trainings
         dataset_train = TwoSampleDataSet(x_train__, y_train__)
         val_mmd2_pq, val_stat, val_obj = self.forward(x_val__, y_val__, reg=reg)
