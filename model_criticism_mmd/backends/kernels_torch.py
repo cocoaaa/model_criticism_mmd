@@ -11,6 +11,7 @@ from sklearn.metrics.pairwise import euclidean_distances
 from model_criticism_mmd.logger_unit import logger
 
 FloatOrTensor = Union[float, torch.Tensor]
+device_default = torch.device('cpu')
 
 
 @dataclasses.dataclass
@@ -35,8 +36,8 @@ class BasicRBFKernelFunction(BaseKernel):
     """A Kernel class with Euclidean-distance
     """
     def __init__(self,
-                 device_obj: torch.device,
-                 log_sigma: Union[float, torch.Tensor],
+                 device_obj: torch.device = device_default,
+                 log_sigma: Union[float, torch.Tensor] = 0.0,
                  opt_sigma: bool = False):
         """
         Args:
@@ -123,8 +124,8 @@ class BasicRBFKernelFunction(BaseKernel):
 class MaternKernelFunction(BaseKernel):
     """A class for Matern Kernel."""
     def __init__(self,
-                 device_obj: torch.device,
                  nu: float,
+                 device_obj: torch.device = device_default,
                  length_scale: float = 1.0):
         """init an object.
         Parameters of Matern Kernel is not for optimizations. It is supposed that nu and length_scale params are fixed.
