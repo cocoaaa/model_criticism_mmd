@@ -11,11 +11,12 @@ def test_comparison(resource_path_root: pathlib.Path):
     """A test that we confirm results are almost similar between Theano-backend and Torch-backend.
 
     We check if MMD value from both backends are similar values.
+    Also, we check the index with high variances == the index with high weight of scales vector.
     """
     device_obj_torch = torch.device('cpu')
 
     size = 100
-    n_trial = 1
+    n_trial = 3
     n_epoch = 500
     batch_size = 200
 
@@ -38,11 +39,6 @@ def test_comparison(resource_path_root: pathlib.Path):
         y_train = y[:80]
         x_val = x[80:]
         y_val = y[80:]
-
-        dim_most_diff_variance: int = sorted(
-            [(n_dim, abs(x[:, n_dim].var() - y[:, n_dim].var())) for n_dim in [0, 1, 2]],
-            key=lambda t: t[1], reverse=True)[0][0]
-        # end for
 
         # with sigma optimization
         trainer_theano = ModelTrainerTheanoBackend()
@@ -74,7 +70,6 @@ def test_comparison(resource_path_root: pathlib.Path):
                                                 opt_log=True)
         result_stacks_with_sigma.append(OptimizationResult(x, y, trained_obj_theano, trained_obj_torch))
 
-        # todo not changed yet
         # without sigma optimization
         trainer_theano = ModelTrainerTheanoBackend()
         trained_obj_theano = trainer_theano.train(x_train,
@@ -97,28 +92,40 @@ def test_comparison(resource_path_root: pathlib.Path):
 
     for set_with_sigma_opt, set_without_sigma_out in zip(result_stacks_with_sigma, result_stacks_without_sigma):
         # comparison of sigma_opt
-        avg_mmd_training_torch = set_with_sigma_opt.torch.training_log[-1].avg_mmd_training
-        avg_mmd_training_theano = set_with_sigma_opt.theano.training_log[-1].avg_mmd_training
+        avg_mmd_training_torch = set_with_sigma_opt.torch.training_log[-1].mmd_validation
+        avg_mmd_training_theano = set_with_sigma_opt.theano.training_log[-1].mmd_validation
         assert (avg_mmd_training_torch - avg_mmd_training_theano) < 1.0, \
             f'Result has significant difference! theano={avg_mmd_training_torch} torch={avg_mmd_training_torch}'
 
-        avg_obj_train_torch = set_with_sigma_opt.torch.training_log[-1].avg_obj_train
-        avg_obj_train_theano = set_with_sigma_opt.theano.training_log[-1].avg_obj_train
+        avg_obj_train_torch = set_with_sigma_opt.torch.training_log[-1].obj_validation
+        avg_obj_train_theano = set_with_sigma_opt.theano.training_log[-1].obj_validation
         assert (avg_obj_train_torch - avg_obj_train_theano) < 1.0, \
             f'Result has significant difference! theano={avg_obj_train_theano} torch={avg_obj_train_torch}'
 
         # comparison of sigma_opt = False
-        avg_mmd_training_torch = set_without_sigma_out.torch.training_log[-1].avg_mmd_training
-        avg_mmd_training_theano = set_without_sigma_out.theano.training_log[-1].avg_mmd_training
+        avg_mmd_training_torch = set_without_sigma_out.torch.training_log[-1].mmd_validation
+        avg_mmd_training_theano = set_without_sigma_out.theano.training_log[-1].mmd_validation
         assert (avg_mmd_training_torch - avg_mmd_training_theano) < 1.0, \
             f'Result has significant difference! theano={avg_mmd_training_torch} torch={avg_mmd_training_torch}'
 
-        avg_obj_train_torch = set_without_sigma_out.torch.training_log[-1].avg_obj_train
-        avg_obj_train_theano = set_without_sigma_out.theano.training_log[-1].avg_obj_train
+        avg_obj_train_torch = set_without_sigma_out.torch.training_log[-1].obj_validation
+        avg_obj_train_theano = set_without_sigma_out.theano.training_log[-1].obj_validation
         assert (avg_obj_train_torch - avg_obj_train_theano) < 1.0, \
             f'Result has significant difference! theano={avg_obj_train_theano} torch={avg_obj_train_torch}'
 
         # todo should check correspondence of index.
+        x = set_with_sigma_opt.x
+        y = set_with_sigma_opt.y
+
+        dim_most_diff_variance: int = sorted(
+            [(n_dim, abs(x[:, n_dim].var() - y[:, n_dim].var())) for n_dim in [0, 1, 2]],
+            key=lambda t: t[1], reverse=True)[0][0]
+        # end for
+
+        assert int(numpy.argmax(set_without_sigma_out.torch.scales)) == dim_most_diff_variance, \
+            f'{int(numpy.argmax(set_without_sigma_out.theano.scales))} != {dim_most_diff_variance}'
+        assert int(numpy.argmax(set_without_sigma_out.torch.scales)) == dim_most_diff_variance, \
+            f'{int(numpy.argmax(set_without_sigma_out.theano.scales))} != {dim_most_diff_variance}'
 
 
 if __name__ == '__main__':
