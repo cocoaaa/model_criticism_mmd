@@ -329,7 +329,7 @@ class ModelTrainerTheanoBackend(TrainerBase):
         mmd2_pq, stat = self.rbf_mmd2_and_ratio(X=rep_p, Y=rep_q, **kwargs)
         # obj is "objective" value.
         obj = -(T.log(T.largest(stat, 1e-6)) if opt_log else stat) + reg
-        return mmd2_pq, obj, rep_p, net_p, net_q, log_sigma
+        return mmd2_pq, obj, stat, rep_p, net_p, net_q, log_sigma
 
     def setup(self,
               dim,
@@ -365,7 +365,7 @@ class ModelTrainerTheanoBackend(TrainerBase):
         input_p = T.matrix('input_p')
         input_q = T.matrix('input_q')
 
-        mmd2_pq, obj, rep_p, net_p, net_q, log_sigma = self.make_network(
+        mmd2_pq, obj, ratio, rep_p, net_p, net_q, log_sigma = self.make_network(
             input_p, input_q, dim,
             criterion=criterion, biased=biased, streaming_est=streaming_est,
             opt_log=opt_log, linear_kernel=linear_kernel, log_sigma=init_log_sigma,
@@ -391,10 +391,11 @@ class ModelTrainerTheanoBackend(TrainerBase):
         train_fn = theano.function(
             inputs=[input_p, input_q], outputs=[mmd2_pq, obj], updates=updates)
         val_fn = theano.function(inputs=[input_p, input_q], outputs=[mmd2_pq, obj])
+        debug_fn = theano.function(inputs=[input_p, input_q], outputs=[mmd2_pq, ratio])
         get_rep = theano.function(inputs=[input_p], outputs=rep_p)
         logger.info("done")
 
-        return params, train_fn, val_fn, get_rep, log_sigma, sacles
+        return params, train_fn, val_fn, debug_fn, get_rep, log_sigma, sacles
 
 
     ################################################################################
@@ -490,7 +491,7 @@ class ModelTrainerTheanoBackend(TrainerBase):
             logger.info("Using sigma = {}".format(
                 'median' if init_sigma_median else np.exp(init_log_sigma)))
         # definition of graph
-        params, train_fn, val_fn, get_rep, log_sigma, scales = self.setup(
+        params, train_fn, val_fn, debug_fn, get_rep, log_sigma, scales = self.setup(
             dim, criterion=criterion, linear_kernel=linear_kernel,
             biased=biased, streaming_est=streaming_est,
             hotelling_reg=hotelling_reg,
@@ -568,6 +569,7 @@ class ModelTrainerTheanoBackend(TrainerBase):
 
         t_mmd2, t_obj = self.run_val(X_train, Y_train, batchsize, val_fn)
         v_mmd2, v_obj = self.run_val(X_val, Y_val, val_batchsize, val_fn)
+
         log(0, t_mmd2, t_obj, v_mmd2, v_obj, 0)
         start_time = time.time()
         # logger.info(f'{0},{t_mmd2},{t_obj},{scales.get_value()},{log_sigma.get_value()}')
@@ -575,7 +577,9 @@ class ModelTrainerTheanoBackend(TrainerBase):
             try:
                 t_mmd2, t_obj = self.run_train_epoch(
                     X_train, Y_train, batchsize, train_fn, log_sigma, scales, is_shuffle=True)
-                v_mmd2, v_obj = self.run_val(X_val, Y_val, val_batchsize, val_fn)
+                v_mmd2_avg, v_obj_avg = self.run_val(X_val, Y_val, val_batchsize, val_fn)
+                debug_mmd2, debug_ratio = debug_fn(X_val, Y_val)
+                v_mmd2, v_obj = val_fn(X_val, Y_val)
                 log(epoch, t_mmd2, t_obj, v_mmd2, v_obj, time.time() - start_time)
 
             except KeyboardInterrupt:

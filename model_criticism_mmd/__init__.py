@@ -1,5 +1,6 @@
 from model_criticism_mmd.logger_unit import logger
 from model_criticism_mmd.backends.backend_torch import ModelTrainerTorchBackend, MMD
+from model_criticism_mmd.backends import kernels_torch
 try:
     from model_criticism_mmd.backends.backend_theano import ModelTrainerTheanoBackend
 except Exception as e:
