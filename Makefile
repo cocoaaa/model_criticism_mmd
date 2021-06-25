@@ -12,3 +12,6 @@ full:
 	poetry build --format sdist
 	tar -xvf dist/*-`poetry version -s`.tar.gz
 	cd model_criticism_mmd-*/ && pip install -e .
+test:
+	pytest tests/
+	pytest --nbmake "samples"
