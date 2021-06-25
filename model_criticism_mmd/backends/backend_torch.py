@@ -33,7 +33,7 @@ class MMD(object):
                  kernel_function_obj: kernels_torch.BaseKernel,
                  scales: typing.Optional[torch.Tensor] = None,
                  device_obj: torch.device = device_default,
-                 biased: bool = False):
+                 biased: bool = True):
         """
         Args:
             kernel_function_obj: Kernel function by your preference.
@@ -192,7 +192,9 @@ class MMD(object):
             __y = torch.tensor(y) if isinstance(x, numpy.ndarray) else y
             rep_x, rep_y = self.operation_scale_product(self.scales, __x, __y)
         else:
-            rep_x, rep_y = x, y
+            __x = torch.tensor(x) if isinstance(x, numpy.ndarray) else x
+            __y = torch.tensor(y) if isinstance(x, numpy.ndarray) else y
+            rep_x, rep_y = __x, __y
         # end if
         mmd2, ratio = self.process_mmd2_and_ratio(rep_x, rep_y)
         if is_detach:
@@ -244,7 +246,7 @@ class ModelTrainerTorchBackend(TrainerBase):
                         dataset: TwoSampleDataSet,
                         batchsize: int,
                         reg: torch.Tensor,
-                        num_workers: int = 2) -> typing.Tuple[torch.Tensor, torch.Tensor]:
+                        num_workers: int = 1) -> typing.Tuple[torch.Tensor, torch.Tensor]:
         total_mmd2 = 0
         total_obj = 0
         n_batches = 0
@@ -287,7 +289,7 @@ class ModelTrainerTorchBackend(TrainerBase):
                 input_p: torch.Tensor,
                 input_q: torch.Tensor,
                 reg: typing.Optional[Tensor] = None,
-                opt_log: bool = False) -> typing.Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+                opt_log: bool = True) -> typing.Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """A procedure to compute mmd-value with the given parameters.
         The procedure correspond to forward() operation.
 
@@ -388,13 +390,16 @@ class ModelTrainerTorchBackend(TrainerBase):
     #     return log_sigma
 
     @staticmethod
-    def log_message(epoch: int, avg_mmd2: Tensor, avg_obj: Tensor, val_mmd2_pq: Tensor, val_obj: Tensor):
-        fmt = ("{: >6,}: avg train MMD^2 {} obj {},  avg val MMD^2 {}  obj {}  elapsed: {:,}")
+    def log_message(epoch: int, avg_mmd2: Tensor, avg_obj: Tensor, val_mmd2_pq: Tensor,
+                    val_stat: Tensor, val_obj: Tensor):
+        fmt = ("{: >6,}: [avg train] MMD^2 {} obj {} "
+               "val-MMD^2 {} val-ratio {} val-obj {}  elapsed: {:,}")
         if epoch in {0, 5, 25, 50} or epoch % 100 == 0:
             logger.info(
                 fmt.format(epoch, avg_mmd2.detach().cpu().numpy(),
                            avg_obj.detach().cpu().numpy(),
                            val_mmd2_pq.detach().cpu().numpy(),
+                           val_stat.detach().cpu().numpy(),
                            val_obj.detach().cpu().numpy(),
                            0.0))
         # end if
@@ -411,7 +416,7 @@ class ModelTrainerTorchBackend(TrainerBase):
               opt_log: bool = True,
               x_val: TypeInputData = None,
               y_val: TypeInputData = None,
-              num_workers: int = 4) -> TrainedMmdParameters:
+              num_workers: int = 1) -> TrainedMmdParameters:
         """Training (Optimization) of MMD parameters.
 
         Args:
@@ -453,7 +458,8 @@ class ModelTrainerTorchBackend(TrainerBase):
         val_mmd2_pq, val_stat, val_obj = self.forward(x_val__, y_val__, reg=reg)
         logger.debug(
             f'Validation at 0. MMD^2 = {val_mmd2_pq.detach().cpu().numpy()}, '
-            f'obj-value = {val_obj.detach().cpu().numpy()}')
+            f'ratio = {val_stat.detach().cpu().numpy()} '
+            f'obj = {val_obj.detach().cpu().numpy()}')
 
         training_log = []
         for epoch in range(1, num_epochs + 1):
@@ -471,7 +477,7 @@ class ModelTrainerTorchBackend(TrainerBase):
                                             val_obj.detach().cpu().numpy(),
                                             sigma=None,
                                             scales=self.scales.detach().cpu().numpy()))
-            self.log_message(epoch, avg_mmd2, avg_obj, val_mmd2_pq, val_obj)
+            self.log_message(epoch, avg_mmd2, avg_obj, val_mmd2_pq, val_stat, val_obj)
         # end for
         return TrainedMmdParameters(
             scales=self.scales.detach().cpu().numpy(),
