@@ -141,29 +141,6 @@ class MMD(object):
         return self._mmd2_and_ratio(kernel_matrix_obj.k_xx, kernel_matrix_obj.k_xy, kernel_matrix_obj.k_yy,
                                     unit_diagonal=True)
 
-    # def rbf_mmd2_and_ratio(self,
-    #                        x: torch.Tensor,
-    #                        y: torch.Tensor,
-    #                        sigma: torch.Tensor,
-    #                        biased=True):
-    #     # todo return type
-    #     gamma = 1 / (2 * sigma**2)
-    #
-    #     # torch.t() is transpose function. torch.dot() is only for vectors. For 2nd tensors, "mm".
-    #     xx = torch.mm(x, torch.t(x))
-    #     xy = torch.mm(x, torch.t(y))
-    #     yy = torch.mm(y, torch.t(y))
-    #
-    #     x_sqnorms = torch.diagonal(xx, offset=0)
-    #     y_sqnorms = torch.diagonal(yy, offset=0)
-    #
-    #     # torch.exp(-1 * gamma * () is kernel
-    #     k_xy = torch.exp(-1 * gamma * (-2 * xy + x_sqnorms[:, np.newaxis] + y_sqnorms[np.newaxis, :]))
-    #     k_xx = torch.exp(-1 * gamma * (-2 * xx + x_sqnorms[:, np.newaxis] + x_sqnorms[np.newaxis, :]))
-    #     k_yy = torch.exp(-1 * gamma * (-2 * yy + y_sqnorms[:, np.newaxis] + y_sqnorms[np.newaxis, :]))
-    #
-    #     return self._mmd2_and_ratio(k_xx, k_xy, k_yy, unit_diagonal=True, biased=biased)
-
     @staticmethod
     def operation_scale_product(scales: torch.Tensor,
                                 input_p: torch.Tensor,
@@ -220,7 +197,6 @@ class ModelTrainerTorchBackend(TrainerBase):
     def model_from_trained(cls,
                            parameter_obj: TrainedMmdParameters,
                            device_obj: torch.device = device_default) -> "ModelTrainerTorchBackend":
-        # todo
         """returns ModelTrainerTorchBackend instance from the trained-parameters."""
         scales = torch.tensor(parameter_obj.scales, device=device_obj)
         model_obj = cls(mmd_estimator=MMD(kernel_function_obj=parameter_obj.kernel_function_obj,
@@ -246,7 +222,9 @@ class ModelTrainerTorchBackend(TrainerBase):
                         dataset: TwoSampleDataSet,
                         batchsize: int,
                         reg: torch.Tensor,
-                        num_workers: int = 1) -> typing.Tuple[torch.Tensor, torch.Tensor]:
+                        num_workers: int = 1,
+                        is_scales_non_negative: bool = False
+                        ) -> typing.Tuple[torch.Tensor, torch.Tensor]:
         total_mmd2 = 0
         total_obj = 0
         n_batches = 0
@@ -269,6 +247,11 @@ class ModelTrainerTorchBackend(TrainerBase):
             #
             optimizer.step()
             optimizer.zero_grad()
+            if is_scales_non_negative:
+                with torch.no_grad():
+                    self.scales[:] = self.scales.clamp(0, None)
+                # end with
+            # end if
         # end for
 
         avg_mmd2 = torch.div(total_mmd2, n_batches)
@@ -276,14 +259,6 @@ class ModelTrainerTorchBackend(TrainerBase):
         return avg_mmd2, avg_obj
 
     # ----------------------------------------------------------------------
-
-    # def operation_scale_product(self,
-    #                             input_p: torch.Tensor,
-    #                             input_q: torch.Tensor) -> typing.Tuple[torch.Tensor, torch.Tensor]:
-    #     rep_p = torch.mul(self.scales, input_p)
-    #     rep_q = torch.mul(self.scales, input_q)
-    #
-    #     return rep_p, rep_q
 
     def forward(self,
                 input_p: torch.Tensor,
@@ -311,32 +286,6 @@ class ModelTrainerTorchBackend(TrainerBase):
         # 2. define the objective-value
         obj = -(torch.log(torch.max(stat, self.obj_value_min_threshold)) if opt_log else stat) + reg__
         return mmd2_pq, stat, obj
-
-    # def __init_sigma_median_heuristic(self,
-    #                                   x_train: TypeInputData,
-    #                                   y_train: TypeInputData,
-    #                                   scales: torch.Tensor,
-    #                                   batchsize: int = 1000) -> torch.Tensor:
-    #     """"""
-    #     # initialization of initial-sigma value
-    #     logger.info("Getting median initial sigma value...")
-    #     n_samp = min(500, x_train.shape[0], y_train.shape[0])
-    #
-    #     samp = torch.cat([
-    #         x_train[np.random.choice(x_train.shape[0], n_samp, replace=False)],
-    #         y_train[np.random.choice(y_train.shape[0], n_samp, replace=False)],
-    #     ])
-    #
-    #     data_loader = torch.utils.data.DataLoader(samp, batch_size=batchsize, shuffle=False)
-    #     reps = torch.cat([torch.mul(batch, scales) for batch in data_loader])
-    #     np_reps = reps.detach().cpu().numpy()
-    #     d2 = euclidean_distances(np_reps, squared=True)
-    #     med_sqdist = np.median(d2[np.triu_indices_from(d2, k=1)])
-    #     __init_log_simga = np.log(med_sqdist / np.sqrt(2)) / 2
-    #     del samp, reps, d2, med_sqdist
-    #     logger.info("initial sigma by median-heuristics {:.3g}".format(np.exp(__init_log_simga)))
-    #
-    #     return torch.tensor(np.array([__init_log_simga]), requires_grad=True, device=self.device_obj)
 
     @staticmethod
     def to_tensor(data: np.ndarray) -> Tensor:
@@ -377,18 +326,6 @@ class ModelTrainerTorchBackend(TrainerBase):
 
         return x_train__d, y_train__d, x_val__d, y_val__d
 
-    # def init_sigma(self, x_train__, y_train__, init_log_sigma: float = None):
-    #     # global sigma value of RBF kernel
-    #     if self.init_sigma_median:
-    #         log_sigma = self.__init_sigma_median_heuristic(x_train=x_train__, y_train=y_train__, scales=self.scales)
-    #     elif init_log_sigma is not None:
-    #         log_sigma: torch.Tensor = torch.tensor([init_log_sigma], requires_grad=True, device=self.device_obj)
-    #     else:
-    #         log_sigma: torch.Tensor = torch.rand(size=(1,), requires_grad=True, device=self.device_obj)
-    #     # end if
-    #
-    #     return log_sigma
-
     @staticmethod
     def log_message(epoch: int, avg_mmd2: Tensor, avg_obj: Tensor, val_mmd2_pq: Tensor,
                     val_stat: Tensor, val_obj: Tensor):
@@ -416,7 +353,8 @@ class ModelTrainerTorchBackend(TrainerBase):
               opt_log: bool = True,
               x_val: TypeInputData = None,
               y_val: TypeInputData = None,
-              num_workers: int = 1) -> TrainedMmdParameters:
+              num_workers: int = 1,
+              is_scales_non_negative: bool = False) -> TrainedMmdParameters:
         """Training (Optimization) of MMD parameters.
 
         Args:
@@ -432,6 +370,7 @@ class ModelTrainerTorchBackend(TrainerBase):
             x_val: data for validation. If None, the data is picked from x_train.
             y_val: same as x_val.
             num_workers: #worker for training.
+            is_scales_non_negative: if True then scales set non-negative. if False, no control.
 
         Returns:
 
@@ -468,7 +407,8 @@ class ModelTrainerTorchBackend(TrainerBase):
                                                      dataset_train,
                                                      batchsize=batchsize,
                                                      reg=reg,
-                                                     num_workers=num_workers)
+                                                     num_workers=num_workers,
+                                                     is_scales_non_negative=is_scales_non_negative)
             val_mmd2_pq, val_stat, val_obj = self.forward(x_val__, y_val__, reg=reg)
             training_log.append(TrainingLog(epoch,
                                             avg_mmd2.detach().cpu().numpy(),
