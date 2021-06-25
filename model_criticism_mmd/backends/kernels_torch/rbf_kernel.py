@@ -1,35 +1,17 @@
 import typing
-
 import torch
-import numpy as np
-import dataclasses
 from typing import Union
-from gpytorch.lazy import LazyEvaluatedKernelTensor
-from gpytorch.kernels.matern_kernel import MaternKernel
+
+import numpy as np
+import numba as nb
 
 from sklearn.metrics.pairwise import euclidean_distances
 from model_criticism_mmd.logger_unit import logger
+from model_criticism_mmd.backends.kernels_torch.base import BaseKernel, KernelMatrixObject
+
 
 FloatOrTensor = Union[float, torch.Tensor]
 device_default = torch.device('cpu')
-
-
-@dataclasses.dataclass
-class KernelMatrixObject(object):
-    k_xx: Union[torch.Tensor, LazyEvaluatedKernelTensor]
-    k_yy: Union[torch.Tensor, LazyEvaluatedKernelTensor]
-    k_xy: torch.Tensor
-
-
-class BaseKernel(object):
-    def __init__(self, device_obj: torch.device):
-        self.device_obj = device_obj
-
-    def compute_kernel_matrix(self, x: torch.Tensor, y: torch.Tensor, **kwargs) -> KernelMatrixObject:
-        raise NotImplementedError()
-
-    def get_params(self, is_grad_param_only: bool = False) -> typing.Dict[str, torch.Tensor]:
-        raise NotImplementedError()
 
 
 class BasicRBFKernelFunction(BaseKernel):
@@ -121,35 +103,47 @@ class BasicRBFKernelFunction(BaseKernel):
         return __
 
 
-class MaternKernelFunction(BaseKernel):
-    """A class for Matern Kernel."""
+class AnyDistanceRBFKernelFunction(BasicRBFKernelFunction):
+    """You can use any distance metrics as your preference.
+    The distance metric must satisfy distance = distance_metric(x, y)"""
+
     def __init__(self,
-                 nu: float,
+                 func_distance_metric: typing.Callable[[np.ndarray, np.ndarray], float],
                  device_obj: torch.device = device_default,
-                 length_scale: float = 1.0):
-        """init an object.
-        Parameters of Matern Kernel is not for optimizations. It is supposed that nu and length_scale params are fixed.
+                 log_sigma: Union[float, torch.Tensor] = 0.0,
+                 opt_sigma: bool = False):
+        """
+        Args:
+            func_distance_metric: a distance metric that satisfies distance = f(x, y).
+            device_obj: torch.device object.
+            log_sigma: sigma parameter of RBF kernel
+            opt_sigma: if True, then sigma parameter will be optimized during training. False, not.
         """
         super().__init__(device_obj=device_obj)
-        self.nu = nu
-        self.length_scale = length_scale
-        self.gpy_kernel = MaternKernel(nu=nu, length_scale=length_scale)
-        if device_obj == torch.device('cuda'):
-            self.gpy_kernel = self.gpy_kernel.cuda()
-        # end if
+        self.func_distance_metric = func_distance_metric
+        self.device_obj = device_obj
+        self.opt_sigma = opt_sigma
+        self.log_sigma = torch.tensor([log_sigma], requires_grad=opt_sigma, device=device_obj)
 
-    def compute_kernel_matrix(self,
-                              x: torch.Tensor,
-                              y: torch.Tensor,
-                              **kwargs) -> KernelMatrixObject:
-        k_xy = self.gpy_kernel(x, y).evaluate()
-        k_xx = self.gpy_kernel(x, x).evaluate()
-        k_yy = self.gpy_kernel(y, y).evaluate()
+    @nb.jit
+    def func_distance(self, x, y) -> float:
+        d = self.func_distance_metric(x, y)
+        return d
 
+    @nb.jit
+    def __compute_kernel_matrix(self, x_1: torch.Tensor, x_2: torch.Tensor) -> torch.Tensor:
+        k_matrix = torch.empty(x_1.shape[0], x_2.shape[0])
+        for i, x_sample in enumerate(x_1):
+            for j, y_sample in enumerate(x_2):
+                v_elem = self.func_distance(x_sample, y_sample)
+                k_matrix[i, j] = v_elem
+            # end for
+        # end for
+        return k_matrix
+
+    def compute_kernel_matrix(self, x: torch.Tensor, y: torch.Tensor, **kwargs) -> KernelMatrixObject:
+        k_xx = self.__compute_kernel_matrix(x, x)
+        k_xy = self.__compute_kernel_matrix(x, y)
+        k_yy = self.__compute_kernel_matrix(y, y)
         return KernelMatrixObject(k_xx=k_xx, k_yy=k_yy, k_xy=k_xy)
 
-    def get_params(self, is_grad_param_only: bool = False) -> typing.Dict[str, FloatOrTensor]:
-        if is_grad_param_only:
-            return {}
-        else:
-            return {'nu': self.nu, 'length_scale': self.length_scale}
