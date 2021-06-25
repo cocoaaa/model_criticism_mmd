@@ -354,13 +354,16 @@ class ModelTrainerTorchBackend(TrainerBase):
               x_val: TypeInputData = None,
               y_val: TypeInputData = None,
               num_workers: int = 1,
-              is_scales_non_negative: bool = False) -> TrainedMmdParameters:
+              is_scales_non_negative: bool = False,
+              is_training_auto_stop: bool = False,
+              auto_stop_epochs: int = 10,
+              auto_stop_threshold: float = 0.00001) -> TrainedMmdParameters:
         """Training (Optimization) of MMD parameters.
 
         Args:
             x_train: data
             y_train: data
-            num_epochs: #epochs
+            num_epochs: #epochs.
             batchsize: batch size
             ratio_train: a ratio of division for training
             reg:
@@ -371,12 +374,15 @@ class ModelTrainerTorchBackend(TrainerBase):
             y_val: same as x_val.
             num_workers: #worker for training.
             is_scales_non_negative: if True then scales set non-negative. if False, no control.
-
+            is_training_auto_stop: if True, then training is auto-stopped. if False, no auto-stop.
+            auto_stop_epochs: If epoch=1 (auto-stop), the epoch size that training is auto stopped.
+            When objective values are constant in auto_stop_epochs, the training-procedure is auto-stopped.
+            auto_stop_threshold: The threshold to stop trainings automatically.
         Returns:
-
+            TrainedMmdParameters
         """
         # todo epoch auto-stop.
-
+        assert num_epochs > 0
         assert len(x_train.shape) == len(y_train.shape) == 2
         logger.debug(f'input data N(sample-size)={x_train.shape[0]}, N(dimension)={x_train.shape[1]}')
 
@@ -418,6 +424,16 @@ class ModelTrainerTorchBackend(TrainerBase):
                                             sigma=None,
                                             scales=self.scales.detach().cpu().numpy()))
             self.log_message(epoch, avg_mmd2, avg_obj, val_mmd2_pq, val_stat, val_obj)
+            if is_training_auto_stop and len(training_log) > auto_stop_epochs:
+                __val_validations = [t_obj.obj_validation for t_obj in training_log[epoch - auto_stop_epochs:epoch]]
+                __variance_validations = max(__val_validations) - min(__val_validations)
+                if __variance_validations < auto_stop_threshold:
+                    logger.info(f'Training stops at {epoch} automatically because epoch is set '
+                                f'and variance in {auto_stop_epochs} '
+                                f'epochs are within {__variance_validations} < {auto_stop_threshold}')
+                    break
+                # end if
+            # end if
         # end for
         return TrainedMmdParameters(
             scales=self.scales.detach().cpu().numpy(),
