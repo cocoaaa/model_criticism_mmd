@@ -50,6 +50,7 @@ def test_auto_stop(resource_path_root: Path):
         f"{mmd_value_trained.mmd}, {mmd_value_from_params.mmd}"
     logger.info(trained_obj.scales)
 
+
 def test_non_negative_scales(resource_path_root: Path):
     num_epochs = 100
     path_trained_model = './trained_mmd_non_negative.pickle'
@@ -138,6 +139,6 @@ def test_devel(resource_path_root: Path):
 
 if __name__ == "__main__":
     test_auto_stop(pathlib.Path('./resources'))
-    #test_devel(pathlib.Path('./resources'))
-    #test_non_negative_scales(pathlib.Path('./resources'))
-    #test_multi_workers(pathlib.Path('./resources'))
+    test_devel(pathlib.Path('./resources'))
+    test_non_negative_scales(pathlib.Path('./resources'))
+    test_multi_workers(pathlib.Path('./resources'))
