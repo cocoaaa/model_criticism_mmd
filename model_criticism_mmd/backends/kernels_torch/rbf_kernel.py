@@ -142,9 +142,14 @@ class AnyDistanceRBFKernelFunction(BasicRBFKernelFunction):
         # end for
         return k_matrix
 
-    def compute_kernel_matrix(self, x: torch.Tensor, y: torch.Tensor, **kwargs) -> KernelMatrixObject:
-        k_xx = self.__compute_kernel_matrix(x, x)
-        k_xy = self.__compute_kernel_matrix(x, y)
-        k_yy = self.__compute_kernel_matrix(y, y)
+    def compute_kernel_matrix(self, x: torch.Tensor, y: torch.Tensor, log_sigma: torch.Tensor = None,
+                              **kwargs) -> KernelMatrixObject:
+        if log_sigma is None:
+            log_sigma = self.log_sigma
+        # end if
+        sigma = torch.exp(log_sigma)
+        gamma = torch.div(1, (2 * torch.pow(sigma, 2)))
+        k_xx = torch.exp(-1 * gamma * self.__compute_kernel_matrix(x, x))
+        k_xy = torch.exp(-1 * gamma * self.__compute_kernel_matrix(x, y))
+        k_yy = torch.exp(-1 * gamma * self.__compute_kernel_matrix(y, y))
         return KernelMatrixObject(k_xx=k_xx, k_yy=k_yy, k_xy=k_xy)
-

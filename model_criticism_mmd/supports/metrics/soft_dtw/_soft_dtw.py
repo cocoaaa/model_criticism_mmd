@@ -145,5 +145,3 @@ class _SoftDTW(Function):
             return grad_output.view(-1, 1, 1).expand_as(E) * E, None, None, None, None
 
 
-
-
