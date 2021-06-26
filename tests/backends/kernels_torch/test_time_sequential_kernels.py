@@ -15,15 +15,19 @@ def test_soft_dtw_single(resource_path_root):
 
 
 def test_soft_dtw_unit(resource_path_root):
+    len_x, len_y, dims = 350, 350, 5
+    x_train = torch.normal(50, 150, (len_x, dims))
+    y_train = torch.normal(10, 0.5, (len_y, dims))
+
+    x_val = torch.rand((100, dims))
+    y_val = torch.rand((100, dims))
     device_obj = torch.device('cpu')
-    kernel_function = kernels_torch.SoftDtwKernelFunctionTimeSample()
+    kernel_function = kernels_torch.SoftDtwKernelFunctionTimeSample(gamma=0.1, log_sigma=0.0)
     trainer = ModelTrainerTorchBackend(MMD(kernel_function_obj=kernel_function, device_obj=device_obj),
                                            device_obj=device_obj)
 
-    len_x, len_y, dims = 20, 20, 5
-    x = torch.rand((len_x, dims))
-    y = torch.rand((len_y, dims))
-    trained_obj = trainer.train(x, y, num_epochs=100)
+    trained_obj = trainer.train(x_train, y_train, num_epochs=100, batchsize=31, x_val=x_val, y_val=y_val,
+                                initial_scale=None)
 
 
 

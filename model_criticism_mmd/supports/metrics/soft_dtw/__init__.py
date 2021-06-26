@@ -62,13 +62,14 @@ class SoftDTW(torch.nn.Module):
         y = y.unsqueeze(1).expand(-1, n, m, d)
         return torch.pow(x - y, 2).sum(3)
 
-    def forward(self, X, Y, is_return_matrix = False):
+    def forward(self, X, Y, is_return_matrix = False, initial_value: float = np.inf):
         """Compute the soft-DTW value between X and Y
 
         Args:
             X: One batch of examples, batch_size x seq_len x dims
             Y: The other batch of examples, batch_size x seq_len x dims
             is_return_matrix:
+            initial_value:
         Returns:
             Alignment matrix if is_return_matrix = True else Soft-DTW score which is an element at (n, m).
         """
@@ -81,9 +82,9 @@ class SoftDTW(torch.nn.Module):
             x = torch.cat([X, X, Y])
             y = torch.cat([Y, X, Y])
             D = self.dist_func(x, y)
-            out = func_dtw(D, self.gamma, self.bandwidth, is_return_matrix)
+            out = func_dtw(D, self.gamma, self.bandwidth, is_return_matrix, initial_value)
             out_xy, out_xx, out_yy = torch.split(out, X.shape[0])
             return out_xy - 1 / 2 * (out_xx + out_yy)
         else:
             D_xy = self.dist_func(X, Y)
-            return func_dtw(D_xy, self.gamma, self.bandwidth, is_return_matrix)
+            return func_dtw(D_xy, self.gamma, self.bandwidth, is_return_matrix, initial_value)

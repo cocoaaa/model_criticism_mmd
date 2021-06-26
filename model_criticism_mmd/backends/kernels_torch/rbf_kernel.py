@@ -71,7 +71,8 @@ class BasicRBFKernelFunction(BaseKernel):
     def compute_kernel_matrix(self,
                               x: torch.Tensor,
                               y: torch.Tensor,
-                              log_sigma: torch.Tensor = None) -> KernelMatrixObject:
+                              log_sigma: torch.Tensor = None,
+                              **kwargs) -> KernelMatrixObject:
         if log_sigma is None:
             log_sigma = self.log_sigma
         # end if

@@ -37,11 +37,11 @@ from torch.autograd import Function
 
 
 @jit(nopython=True)
-def compute_softdtw(D, gamma, bandwidth):
+def compute_softdtw(D, gamma, bandwidth, initial_value = np.inf):
     B = D.shape[0]
     N = D.shape[1]
     M = D.shape[2]
-    R = np.ones((B, N + 2, M + 2)) * np.inf
+    R = np.ones((B, N + 2, M + 2)) * initial_value
     R[:, 0, 0] = 0
     for b in range(B):
         for j in range(1, M + 1):
@@ -99,7 +99,7 @@ class _SoftDTW(Function):
     CPU implementation based on https://github.com/Sleepwalking/pytorch-softdtw
     """
     @staticmethod
-    def forward(ctx, D, gamma, bandwidth, is_return_matrix = False):
+    def forward(ctx, D, gamma, bandwidth, is_return_matrix = False, initial_value: float = np.inf):
         """
 
         Args:
@@ -108,6 +108,7 @@ class _SoftDTW(Function):
             gamma: parameter of SoftDTW
             bandwidth: threshold during computations of SoftDTW
             is_return_matrix: True, then it returns an alignment matrix. False, then it returns a cost.
+            initial_value: A value to initialize R matrix.
 
         Returns:
             Tensor or float
@@ -119,7 +120,7 @@ class _SoftDTW(Function):
         D_ = D.detach().cpu().numpy()
         g_ = gamma.item()
         b_ = bandwidth.item()
-        R = torch.Tensor(compute_softdtw(D_, g_, b_)).to(dev).type(dtype)
+        R = torch.Tensor(compute_softdtw(D_, g_, b_, initial_value=0)).to(dev).type(dtype)
         ctx.save_for_backward(D, R, gamma, bandwidth)
         if is_return_matrix:
             return R[:, :-2, :-2]
@@ -139,9 +140,9 @@ class _SoftDTW(Function):
         if len(grad_output.shape) == len(E.shape):
             # implementation note: If SoftDTW returns a matrix,
             # the grad_output should be a weight whose value is weight during auto-grad process.
-            return grad_output * E, None, None, None
+            return grad_output * E, None, None, None, None
         else:
-            return grad_output.view(-1, 1, 1).expand_as(E) * E, None, None, None
+            return grad_output.view(-1, 1, 1).expand_as(E) * E, None, None, None, None
 
 
 

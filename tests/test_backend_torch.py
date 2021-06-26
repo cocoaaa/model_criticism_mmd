@@ -117,9 +117,10 @@ def test_devel(resource_path_root: Path):
     x_train, y_train, x_test, y_test = data_processor(resource_path_root)
     init_scale = torch.tensor(np.array([0.05, 0.55]))
     device_obj = torch.device(torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
-    for kernel_function in [SoftDtwKernelFunctionTimeSample(device_obj=device_obj),
-                            MaternKernelFunction(nu=0.5, device_obj=device_obj),
-                            BasicRBFKernelFunction(log_sigma=0.0, device_obj=device_obj, opt_sigma=True)]:
+    for kernel_function in [
+        BasicRBFKernelFunction(log_sigma=0.0, device_obj=device_obj, opt_sigma=True),
+        MaternKernelFunction(nu=0.5, device_obj=device_obj),
+    ]:
         trainer = ModelTrainerTorchBackend(MMD(kernel_function_obj=kernel_function, device_obj=device_obj),
                                            device_obj=device_obj)
         trained_obj = trainer.train(x_train,
@@ -141,6 +142,6 @@ def test_devel(resource_path_root: Path):
 
 if __name__ == "__main__":
     test_devel(pathlib.Path('./resources'))
-    # test_auto_stop(pathlib.Path('./resources'))
-    # test_non_negative_scales(pathlib.Path('./resources'))
-    # test_multi_workers(pathlib.Path('./resources'))
+    test_auto_stop(pathlib.Path('./resources'))
+    test_non_negative_scales(pathlib.Path('./resources'))
+    test_multi_workers(pathlib.Path('./resources'))
