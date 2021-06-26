@@ -100,6 +100,18 @@ class _SoftDTW(Function):
     """
     @staticmethod
     def forward(ctx, D, gamma, bandwidth, is_return_matrix = False):
+        """
+
+        Args:
+            ctx:
+            D: Tensor (batch-size, columns, rows). D must be values of Euclidean distance.
+            gamma: parameter of SoftDTW
+            bandwidth: threshold during computations of SoftDTW
+            is_return_matrix: True, then it returns an alignment matrix. False, then it returns a cost.
+
+        Returns:
+            Tensor or float
+        """
         dev = D.device
         dtype = D.dtype
         gamma = torch.Tensor([gamma]).to(dev).type(dtype)  # dtype fixed
@@ -110,7 +122,7 @@ class _SoftDTW(Function):
         R = torch.Tensor(compute_softdtw(D_, g_, b_)).to(dev).type(dtype)
         ctx.save_for_backward(D, R, gamma, bandwidth)
         if is_return_matrix:
-            return R
+            return R[:, :-2, :-2]
         else:
             return R[:, -2, -2]
 
@@ -124,8 +136,13 @@ class _SoftDTW(Function):
         g_ = gamma.item()
         b_ = bandwidth.item()
         E = torch.Tensor(compute_softdtw_backward(D_, R_, g_, b_)).to(dev).type(dtype)
-        print(grad_output.view(-1, 1, 1).shape)
-        print(E.shape)
-        return grad_output.view(-1, 1, 1).expand_as(E) * E, None, None
+        if len(grad_output.shape) == len(E.shape):
+            # implementation note: If SoftDTW returns a matrix,
+            # the grad_output should be a weight whose value is weight during auto-grad process.
+            return grad_output * E, None, None, None
+        else:
+            return grad_output.view(-1, 1, 1).expand_as(E) * E, None, None, None
+
+
 
 

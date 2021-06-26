@@ -13,7 +13,7 @@ def timed_run(a, b, sdtw):
 
     # Forward pass
     start = timer()
-    forward = sdtw(a, b)
+    forward = sdtw(a, b, False)
     end = timer()
     t = end - start
 
@@ -82,7 +82,7 @@ def test_get_distance_matrix():
 
     # Create the "criterion" object
     sdtw = SoftDTW(use_cuda=False, gamma=0.1)
-    a = sdtw.get_distance_matrix(x, y)
+    a = sdtw.forward(x, y, True)
     print()
 
 

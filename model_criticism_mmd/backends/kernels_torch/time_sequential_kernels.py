@@ -48,15 +48,10 @@ class SoftDtwKernelFunctionTimeSample(BaseKernel):
         soft_dt_xy = self.compute_soft_dtw(__x, __y)
         soft_dt_yy = self.compute_soft_dtw(__y, __y)
 
-        __soft_dt_xx = soft_dt_xx[0] if len(x.size()) == 2 else soft_dt_xx
-        __soft_dt_yy = soft_dt_yy[0] if len(y.size()) == 2 else soft_dt_yy
-        __soft_dt_xy = soft_dt_xy[0] if (len(x.size()) == 2 or len(y.size()) == 2) else soft_dt_xy
+        k_xx = torch.exp(-1 * gamma * soft_dt_xx).squeeze(0)
+        k_yy = torch.exp(-1 * gamma * soft_dt_yy).squeeze(0)
+        k_xy = torch.exp(-1 * gamma * soft_dt_xy).squeeze(0)
 
-        k_xx = torch.exp(-1 * gamma * __soft_dt_xx)
-        k_yy = torch.exp(-1 * gamma * __soft_dt_yy)
-        k_xy = torch.exp(-1 * gamma * __soft_dt_xy)
-
-        # todo maybe, I need post process
         return KernelMatrixObject(k_xx, k_yy, k_xy)
 
     def get_params(self, is_grad_param_only: bool = False) -> typing.Dict[str, torch.Tensor]:

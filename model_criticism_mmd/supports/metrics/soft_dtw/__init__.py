@@ -81,7 +81,7 @@ class SoftDTW(torch.nn.Module):
             x = torch.cat([X, X, Y])
             y = torch.cat([Y, X, Y])
             D = self.dist_func(x, y)
-            out = func_dtw(D, self.gamma, self.bandwidth)
+            out = func_dtw(D, self.gamma, self.bandwidth, is_return_matrix)
             out_xy, out_xx, out_yy = torch.split(out, X.shape[0])
             return out_xy - 1 / 2 * (out_xx + out_yy)
         else:
