@@ -4,9 +4,7 @@ from typing import Union
 
 from model_criticism_mmd.logger_unit import logger
 from model_criticism_mmd.backends.kernels_torch.base import BaseKernel, KernelMatrixObject
-from sdtw.distance import SquaredEuclidean
-from sdtw.soft_dtw import SoftDTW
-
+from model_criticism_mmd.supports.metrics.soft_dtw import SoftDTW
 
 FloatOrTensor = Union[float, torch.Tensor]
 device_default = torch.device('cpu')
@@ -24,22 +22,17 @@ class SoftDtwKernelFunctionTimeSample(BaseKernel):
                  device_obj: torch.device = device_default):
         self.gamma = gamma
         self.log_sigma = torch.tensor(log_sigma) if isinstance(log_sigma, float) else log_sigma
+        self.soft_dtw = SoftDTW(use_cuda=True if device_obj.type == 'cuda' else False, gamma=gamma, normalize=False)
         super().__init__(device_obj=device_obj)
 
-    def compute_soft_dtw(self, x: torch.Tensor, y: torch.Tensor):
-        # D can also be an arbitrary distance matrix: numpy array, shape [m, n]
-        matrix_d = SquaredEuclidean(x.detach().cpu().numpy(), y.detach().cpu().numpy())
-        sdtw = SoftDTW(matrix_d, gamma=self.gamma)
-        # soft-DTW discrepancy, approaches DTW as gamma -> 0
-        value = sdtw.compute()
-        # gradient w.r.t. D, shape = [m, n], which is also the expected alignment matrix
-        matrix_e = sdtw.grad()
-        # gradient w.r.t. X, shape = [m, d]
-        # matrix_g = matrix_d.jacobian_product(matrix_e)
-
-        return torch.tensor(matrix_e, device=self.device_obj)
+    def compute_soft_dtw(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        matrix_alignment = self.soft_dtw.forward(x, y, is_return_matrix=True)
+        return matrix_alignment
 
     def compute_kernel_matrix(self, x: torch.Tensor, y: torch.Tensor, **kwargs) -> KernelMatrixObject:
+        assert isinstance(x, torch.Tensor)
+        assert isinstance(y, torch.Tensor)
+
         if 'log_sigma' not in kwargs:
             log_sigma = self.log_sigma
         else:
@@ -48,14 +41,22 @@ class SoftDtwKernelFunctionTimeSample(BaseKernel):
         sigma = torch.exp(log_sigma)
         gamma = torch.div(1, (2 * torch.pow(sigma, 2)))
 
-        soft_dt_xx = self.compute_soft_dtw(x, x)
-        soft_dt_xy = self.compute_soft_dtw(x, y)
-        soft_dt_yy = self.compute_soft_dtw(y, y)
+        __x = x.unsqueeze(0) if len(x.size()) == 2 else x
+        __y = y.unsqueeze(0) if len(y.size()) == 2 else y
 
-        k_xx = torch.exp(-1 * gamma * soft_dt_xx)
-        k_yy = torch.exp(-1 * gamma * soft_dt_yy)
-        k_xy = torch.exp(-1 * gamma * soft_dt_xy)
+        soft_dt_xx = self.compute_soft_dtw(__x, __x)
+        soft_dt_xy = self.compute_soft_dtw(__x, __y)
+        soft_dt_yy = self.compute_soft_dtw(__y, __y)
 
+        __soft_dt_xx = soft_dt_xx[0] if len(x.size()) == 2 else soft_dt_xx
+        __soft_dt_yy = soft_dt_yy[0] if len(y.size()) == 2 else soft_dt_yy
+        __soft_dt_xy = soft_dt_xy[0] if (len(x.size()) == 2 or len(y.size()) == 2) else soft_dt_xy
+
+        k_xx = torch.exp(-1 * gamma * __soft_dt_xx)
+        k_yy = torch.exp(-1 * gamma * __soft_dt_yy)
+        k_xy = torch.exp(-1 * gamma * __soft_dt_xy)
+
+        # todo maybe, I need post process
         return KernelMatrixObject(k_xx, k_yy, k_xy)
 
     def get_params(self, is_grad_param_only: bool = False) -> typing.Dict[str, torch.Tensor]:
