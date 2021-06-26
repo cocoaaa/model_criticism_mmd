@@ -25,12 +25,11 @@ def test_soft_dtw_unit(resource_path_root):
     kernel_function = kernels_torch.SoftDtwKernelFunctionTimeSample(gamma=0.1, log_sigma=0.0)
     trainer = ModelTrainerTorchBackend(MMD(kernel_function_obj=kernel_function, device_obj=device_obj),
                                            device_obj=device_obj)
-
-    trained_obj = trainer.train(x_train, y_train, num_epochs=100, batchsize=31, x_val=x_val, y_val=y_val,
+    trained_obj = trainer.train(x_train, y_train, num_epochs=100, batchsize=350, x_val=x_val, y_val=y_val,
                                 initial_scale=None)
-
+    print(trainer.mmd_distance(x_val, y_val, is_detach=True))
 
 
 if __name__ == '__main__':
-    # test_soft_dtw_single(Path('../../resources'))
+    test_soft_dtw_single(Path('../../resources'))
     test_soft_dtw_unit(Path('../../resources'))

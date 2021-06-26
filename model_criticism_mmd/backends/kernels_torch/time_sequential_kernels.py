@@ -12,7 +12,6 @@ from model_criticism_mmd.supports.metrics.soft_dtw import SoftDTW
 FloatOrTensor = Union[float, torch.Tensor]
 device_default = torch.device('cpu')
 
-
 class SoftDtwKernelFunctionTimeSample(BasicRBFKernelFunction):
     """A Kernel class when your data is temporal data.
     Your data is matrix form, of which a sample is data at t=i.
@@ -84,9 +83,9 @@ class SoftDtwKernelFunctionTimeSample(BasicRBFKernelFunction):
         __x = x_input.unsqueeze(0) if len(x_input.size()) == 2 else x
         __y = y_input.unsqueeze(0) if len(y_input.size()) == 2 else y
 
-        soft_dt_xx = self.soft_dtw.forward(__x, __x, is_return_matrix=True)
-        soft_dt_xy = self.soft_dtw.forward(__x, __y, is_return_matrix=True)
-        soft_dt_yy = self.soft_dtw.forward(__y, __y, is_return_matrix=True)
+        soft_dt_xx = torch.pow(self.soft_dtw.forward(__x, __x, is_return_matrix=True), 2)
+        soft_dt_xy = torch.pow(self.soft_dtw.forward(__x, __y, is_return_matrix=True), 2)
+        soft_dt_yy = torch.pow(self.soft_dtw.forward(__y, __y, is_return_matrix=True), 2)
 
         if self.normalize:
             soft_dt_xx = normalize(soft_dt_xx, dim=0)

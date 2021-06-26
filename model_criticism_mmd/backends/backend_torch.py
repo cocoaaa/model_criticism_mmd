@@ -258,9 +258,6 @@ class ModelTrainerTorchBackend(TrainerBase):
         else:
             data_loader = torch.utils.data.DataLoader(dataset, batch_size=batchsize, shuffle=is_shuffle)
         # end if
-        import copy
-
-        previous_scales = copy.deepcopy(self.mmd_estimator.scales)
         for xbatch, ybatch in data_loader:
             mmd2_pq, stat, obj = self.forward(xbatch, ybatch, reg=reg)
             # end if
@@ -274,12 +271,9 @@ class ModelTrainerTorchBackend(TrainerBase):
             #
             optimizer.step()
             optimizer.zero_grad()
-            if len(self.mmd_estimator.scales[torch.isnan(self.mmd_estimator.scales)]) > 0:
-                self.mmd_estimator.scales = previous_scales
-            else:
-                previous_scales = copy.deepcopy(self.mmd_estimator.scales)
+            if len(self.scales[torch.isnan(self.scales)]):
+                raise NanException('scales vector goes into Nan. Stop training.')
             # end if
-
             if is_scales_non_negative:
                 with torch.no_grad():
                     self.scales[:] = self.scales.clamp(0, None)
