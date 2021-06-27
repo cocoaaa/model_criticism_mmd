@@ -280,7 +280,6 @@ class ModelTrainerTorchBackend(TrainerBase):
                 # end with
             # end if
         # end for
-
         avg_mmd2 = torch.div(total_mmd2, n_batches)
         avg_obj = torch.div(total_obj, n_batches)
 

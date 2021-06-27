@@ -103,6 +103,77 @@ class BasicRBFKernelFunction(BaseKernel):
         # end if
         return __
 
+# ------------------------------------------------------------------------------------------------
+# NOTE: the code below seems to have issues (or bugs).
+# The learning process does not work at all.
+
+@nb.jit
+def func_distance(x, y, func_distance_metric) -> float:
+    d = func_distance_metric(x, y)
+    return d
+
+
+@nb.jit
+def compute_distance_matrix(x_1: np.ndarray, x_2: np.ndarray, func_distance_metric) -> np.ndarray:
+    d_matrix = np.empty(shape=(x_1.shape[0], x_2.shape[0]))
+    for i, x_sample in enumerate(x_1):
+        for j, y_sample in enumerate(x_2):
+            d_matrix[i, j] = func_distance(x_sample, y_sample, func_distance_metric)
+        # end for
+    # end for
+    return d_matrix
+
+
+class RBFCovariance(torch.autograd.Function):
+    """A function module which enables to auto-grad for Pytorch. forked from gpytorch package."""
+    @staticmethod
+    def forward(ctx, x1: torch.Tensor, x2: torch.Tensor, lengthscale, sq_dist_func, is_matrix_wise: bool = True):
+        """
+
+        Args:
+            ctx:
+            x1:
+            x2:
+            lengthscale:
+            sq_dist_func:
+            is_matrix_wise:
+
+        Returns:
+
+        """
+        dev = x1.device
+        dtype = x1.dtype
+        #if any(ctx.needs_input_grad[:2]):
+        #    raise RuntimeError("RBFCovariance cannot compute gradients with " "respect to x1 and x2")
+        if lengthscale.size(-1) > 1:
+            raise ValueError("RBFCovariance cannot handle multiple lengthscales")
+        needs_grad = any(ctx.needs_input_grad)
+        x1_ = x1.div(lengthscale)
+        x2_ = x2.div(lengthscale)
+
+        x1_np = x1_.cpu().detach().numpy()
+        x2_np = x2_.cpu().detach().numpy()
+        if is_matrix_wise:
+            unitless_sq_dist = sq_dist_func(x1_, x2_)
+        else:
+            unitless_sq_dist = compute_distance_matrix(x1_np, x2_np, sq_dist_func)
+        # end if
+        #d_torch = torch.Tensor(unitless_sq_dist).to(dev).type(dtype)
+        d_torch = unitless_sq_dist
+        # clone because inplace operations will mess with what's saved for backward
+        unitless_sq_dist_ = d_torch.clone() if needs_grad else d_torch
+        covar_mat = unitless_sq_dist_.div_(-2.).exp_()
+        if needs_grad:
+            d_output_d_input = unitless_sq_dist_.mul_(covar_mat).div_(lengthscale)
+            ctx.save_for_backward(d_output_d_input)
+        return covar_mat
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        d_output_d_input = ctx.saved_tensors[0]
+        lengthscale_grad = grad_output * d_output_d_input
+        return None, None, lengthscale_grad, None, None
+
 
 class AnyDistanceRBFKernelFunction(BasicRBFKernelFunction):
     """You can use any distance metrics as your preference.
@@ -125,22 +196,7 @@ class AnyDistanceRBFKernelFunction(BasicRBFKernelFunction):
         self.device_obj = device_obj
         self.opt_sigma = opt_sigma
         self.log_sigma = torch.tensor([log_sigma], requires_grad=opt_sigma, device=device_obj)
-
-    @nb.jit
-    def func_distance(self, x, y) -> float:
-        d = self.func_distance_metric(x, y)
-        return d
-
-    @nb.jit
-    def __compute_kernel_matrix(self, x_1: torch.Tensor, x_2: torch.Tensor) -> torch.Tensor:
-        k_matrix = torch.empty(x_1.shape[0], x_2.shape[0])
-        for i, x_sample in enumerate(x_1):
-            for j, y_sample in enumerate(x_2):
-                v_elem = self.func_distance(x_sample, y_sample)
-                k_matrix[i, j] = v_elem
-            # end for
-        # end for
-        return k_matrix
+        self.func_distance = RBFCovariance.apply
 
     def compute_kernel_matrix(self, x: torch.Tensor, y: torch.Tensor, log_sigma: torch.Tensor = None,
                               **kwargs) -> KernelMatrixObject:
@@ -149,7 +205,8 @@ class AnyDistanceRBFKernelFunction(BasicRBFKernelFunction):
         # end if
         sigma = torch.exp(log_sigma)
         gamma = torch.div(1, (2 * torch.pow(sigma, 2)))
-        k_xx = torch.exp(-1 * gamma * self.__compute_kernel_matrix(x, x))
-        k_xy = torch.exp(-1 * gamma * self.__compute_kernel_matrix(x, y))
-        k_yy = torch.exp(-1 * gamma * self.__compute_kernel_matrix(y, y))
+        #k_xx = torch.exp(-1 * gamma * self.func_distance(x, x, torch.tensor([1.0]), self.func_distance_metric, True) ** 2)
+        k_xx = -1 * self.func_distance(x, x, torch.tensor([1.0]), self.func_distance_metric, True) ** 2
+        k_xy = torch.exp(-1 * gamma * self.func_distance(x, y, torch.tensor([1.0]), self.func_distance_metric, True) ** 2)
+        k_yy = torch.exp(-1 * gamma * self.func_distance(y, y, torch.tensor([1.0]), self.func_distance_metric, True) ** 2)
         return KernelMatrixObject(k_xx=k_xx, k_yy=k_yy, k_xy=k_xy)
