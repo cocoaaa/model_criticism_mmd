@@ -7,10 +7,9 @@ maintainers = ["Kensuke Mitsuzawa <kensuke.mit@gmail.com>"]
 license = "BSD"
 readme = "README.md"
 documentation = "Suppose that you have 2 datasets(set of samples). You would like to know how close 2 datasets are and also how difference they are. The `model_criticism_mmd` computes a discrepancy between 2 datasets."
-build = "build.py"
 
 [tool.poetry.dependencies]
-python = "^3.6"
+python = "^3.6.1"
 torch = "*"
 torchvision = "*"
 torchaudio = "*"
@@ -33,7 +32,6 @@ nbmake = "0.5"
 pytest-parallel = "*"
 
 [tool.poetry.scripts]
-install_softDTW = "install_script:install_softDTW"
 
 [build-system]
 requires = ["setuptools", "poetry", "poetry_core>=1.0", "cython"]
