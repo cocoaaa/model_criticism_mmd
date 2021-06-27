@@ -48,12 +48,12 @@ model_criticism_mmd/backends/backend_theano.py
 
 # Examples
 
-See jupyter notebooks.
+See jupyter notebooks. Notes are in `samples/`
 
 # Tests
 
 ```
-pytest tests
+make test
 ```
 
 # License

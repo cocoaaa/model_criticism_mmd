@@ -1,6 +1,7 @@
 import torch
 
-from model_criticism_mmd import ModelTrainerTorchBackend, ModelTrainerTheanoBackend
+from model_criticism_mmd import ModelTrainerTorchBackend, ModelTrainerTheanoBackend, MMD
+from model_criticism_mmd.backends.kernels_torch import BasicRBFKernelFunction
 import numpy
 
 
@@ -42,12 +43,12 @@ def test_case_ard_weight():
                                                   batchsize=batch_size,
                                                   opt_sigma=is_opt_sigma,
                                                   init_scales=init_scales)
-
-        trainer_torch = ModelTrainerTorchBackend(device_obj=device_obj)
+        mmd_estimator = MMD(
+            kernel_function_obj=BasicRBFKernelFunction(device_obj=device_obj), device_obj=device_obj)
+        trainer_torch = ModelTrainerTorchBackend(mmd_estimator=mmd_estimator, device_obj=device_obj)
         trained_obj_torch = trainer_torch.train(x, y,
                                                 num_epochs=n_epoch,
                                                 batchsize=batch_size,
-                                                opt_sigma=is_opt_sigma,
                                                 initial_scale=torch.tensor(init_scales))
 
         result_stacks.append([

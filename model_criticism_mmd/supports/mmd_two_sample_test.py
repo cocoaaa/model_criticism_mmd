@@ -1,7 +1,8 @@
 import numpy as np
+import torch
 from sklearn.metrics.pairwise import euclidean_distances
 from model_criticism_mmd.models import TrainedMmdParameters
-from model_criticism_mmd.backends.kernels_torch import RBFKernelFunction
+from model_criticism_mmd.backends.kernels_torch import BasicRBFKernelFunction
 
 try:
     import shogun as sg
@@ -58,10 +59,14 @@ def rbf_mmd_test(x: np.ndarray,
         # sigma = median / sqrt(2); works better, sometimes at least
         del Z, D2, upper
     else:
-        sigma = trained_params.sigma
-        kernel_width = 2 * sigma**2
+        __params = trained_params.kernel_function_obj.get_params(False)
+        assert 'log_sigma' in __params, 'log_sigma parameter does not exist!'
+        _sigma = np.exp(__params['log_sigma'])
+        sigma = _sigma.cpu().detach().numpy()[0] if isinstance(_sigma, torch.Tensor) else _sigma
+        kernel_width = 2 * (sigma ** 2)
+        assert isinstance(kernel_width, (float, int))
     # end if
-    if not isinstance(trained_params.kernel_function_obj, RBFKernelFunction):
+    if not isinstance(trained_params.kernel_function_obj, BasicRBFKernelFunction):
         raise NotImplementedError('Currently, this function supports only RBFKernelFunction')
     # end if
 
