@@ -13,11 +13,12 @@ class MaternKernelFunction(BaseKernel):
     def __init__(self,
                  nu: float,
                  device_obj: torch.device = device_default,
-                 length_scale: float = 1.0):
+                 length_scale: float = 1.0,
+                 possible_shapes=(2,)):
         """init an object.
         Parameters of Matern Kernel is not for optimizations. It is supposed that nu and length_scale params are fixed.
         """
-        super().__init__(device_obj=device_obj)
+        super().__init__(device_obj=device_obj, possible_shapes=possible_shapes)
         self.nu = nu
         self.length_scale = length_scale
         self.gpy_kernel = MaternKernel(nu=nu, length_scale=length_scale)

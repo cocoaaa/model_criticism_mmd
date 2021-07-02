@@ -182,11 +182,13 @@ class MMD(object):
         Returns:
             MmdValues: named tuple object.
         """
+        self.kernel_function_obj.check_data_shape(x)
+        self.kernel_function_obj.check_data_shape(y)
 
         if self.scales is not None:
-            assert len(self.scales) == x.shape[1] == y.shape[1],\
+            assert len(self.scales) == x.shape[-1] == y.shape[-1],\
             f'Error at scales vector. Dimension size does not match. ' \
-            f'The given scales {len(self.scales)}dims. x {x.shape[1]}dims. y {y.shape[1]}dims.'
+            f'The given scales {len(self.scales)}dims. x {x.shape[-1]}dims. y {y.shape[-1]}dims.'
             __x = torch.tensor(x) if isinstance(x, numpy.ndarray) else x
             __y = torch.tensor(y) if isinstance(x, numpy.ndarray) else y
             rep_x, rep_y = self.operation_scale_product(self.scales, __x, __y)
@@ -231,7 +233,7 @@ class ModelTrainerTorchBackend(TrainerBase):
         must be the same size as the input data."""
 
         if init_scale is None:
-            scales: torch.Tensor = torch.rand(size=(data.shape[1],), requires_grad=True, device=self.device_obj)
+            scales: torch.Tensor = torch.rand(size=(data.shape[-1],), requires_grad=True, device=self.device_obj)
         else:
             logger.info('Set the initial scales value')
             assert data.shape[1] == init_scale.shape[0]
@@ -259,6 +261,7 @@ class ModelTrainerTorchBackend(TrainerBase):
             data_loader = torch.utils.data.DataLoader(dataset, batch_size=batchsize, shuffle=is_shuffle)
         # end if
         for xbatch, ybatch in data_loader:
+            optimizer.zero_grad()
             mmd2_pq, stat, obj = self.forward(xbatch, ybatch, reg=reg)
             # end if
             assert np.isfinite(mmd2_pq.detach().cpu().numpy())
@@ -270,7 +273,6 @@ class ModelTrainerTorchBackend(TrainerBase):
             obj.backward()
             #
             optimizer.step()
-            optimizer.zero_grad()
             if len(self.scales[torch.isnan(self.scales)]):
                 raise NanException('scales vector goes into Nan. Stop training.')
             # end if
@@ -415,7 +417,6 @@ class ModelTrainerTorchBackend(TrainerBase):
         """
         # todo epoch auto-stop.
         assert num_epochs > 0
-        assert len(x_train.shape) == len(y_train.shape) == 2
         logger.debug(f'input data N(sample-size)={x_train.shape[0]}, N(dimension)={x_train.shape[1]}')
 
         if x_val is None or y_val is None:
