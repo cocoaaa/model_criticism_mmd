@@ -54,7 +54,7 @@ class SoftDtwKernelFunctionTimeSample(BasicRBFKernelFunction):
     """
     def __init__(self,
                  gamma: float = 1.0,
-                 log_sigma: Union[float, torch.Tensor] = 1.0,
+                 log_sigma: Union[float, torch.Tensor] = 100,
                  normalize: bool = False,
                  device_obj: torch.device = device_default,
                  opt_sigma: bool = False,

@@ -21,7 +21,7 @@ def test_soft_dtw_single(resource_path_root):
 def test_soft_dtw_unit_time_sample(resource_path_root):
     len_x, len_y, dims = 400, 400, 5
     # input is (n-sample, n-time-series, n-features)
-    x_train = torch.normal(50, 150, (100, len_x, dims))
+    x_train = torch.normal(15, 0.9, (100, len_x, dims))
     y_train = torch.normal(10, 0.5, (100, len_y, dims))
 
     x_val = torch.rand((5, 150, dims))
