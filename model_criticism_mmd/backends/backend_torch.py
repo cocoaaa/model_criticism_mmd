@@ -207,6 +207,7 @@ class MMD(object):
 # ----------------------------------------------------------------------
 
 
+
 class ModelTrainerTorchBackend(TrainerBase):
     """A class to optimize MMD."""
     def __init__(self,
@@ -270,8 +271,10 @@ class ModelTrainerTorchBackend(TrainerBase):
             total_obj += obj
             n_batches += 1
             # do differentiation now.
+            print('backward start')
             obj.backward()
             #
+            print('updating...')
             optimizer.step()
             if len(self.scales[torch.isnan(self.scales)]):
                 raise NanException('scales vector goes into Nan. Stop training.')
@@ -281,6 +284,18 @@ class ModelTrainerTorchBackend(TrainerBase):
                     self.scales[:] = self.scales.clamp(0, None)
                 # end with
             # end if
+            print('gc...')
+            del xbatch
+            del ybatch
+            del self.mmd_estimator.kernel_function_obj.d_xx
+            del self.mmd_estimator.kernel_function_obj.d_yy
+            del self.mmd_estimator.kernel_function_obj.d_xy
+            del self.mmd_estimator.kernel_function_obj.k_xx
+            del self.mmd_estimator.kernel_function_obj.k_yy
+            del self.mmd_estimator.kernel_function_obj.k_xy
+            self.mmd_estimator.kernel_function_obj.soft_dtw_generator.__del__()
+            import gc
+            gc.collect()
         # end for
         avg_mmd2 = torch.div(total_mmd2, n_batches)
         avg_obj = torch.div(total_obj, n_batches)

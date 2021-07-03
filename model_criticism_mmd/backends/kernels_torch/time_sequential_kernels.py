@@ -12,16 +12,10 @@ FloatOrTensor = Union[float, torch.Tensor]
 device_default = torch.device('cpu')
 
 
-
 def func_compute_kernel_matrix(x: torch.Tensor,
                                y: torch.Tensor,
-                               device_obj: torch.device,
-                               gamma: float,
-                               normalize: bool = False,
-                               is_zero_minus_values: bool = True
-                               ) -> torch.Tensor:
-    soft_dtw_generator = SoftDTW(use_cuda=True if device_obj.type == 'cuda' else False,
-                                 gamma=gamma, normalize=normalize)
+                               soft_dtw_generator) -> torch.Tensor:
+
     mat = torch.zeros((x.shape[0], y.shape[0]))
     for i_row in range(x.shape[0]):
         for i_col in range(i_row, y.shape[0]):
@@ -73,6 +67,8 @@ class SoftDtwKernelFunctionTimeSample(BasicRBFKernelFunction):
         self.log_sigma = torch.tensor([log_sigma]) if isinstance(log_sigma, float) else log_sigma
         self.opt_sigma = opt_sigma
         super().__init__(device_obj=device_obj, possible_shapes=possible_shapes, log_sigma=log_sigma)
+        self.soft_dtw_generator = SoftDTW(use_cuda=True if device_obj.type == 'cuda' else False,
+                                          gamma=gamma, normalize=normalize)
 
     def compute_kernel_matrix(self, x: torch.Tensor, y: torch.Tensor, **kwargs) -> KernelMatrixObject:
         assert isinstance(x, torch.Tensor)
@@ -83,18 +79,15 @@ class SoftDtwKernelFunctionTimeSample(BasicRBFKernelFunction):
         else:
             log_sigma = kwargs['log_sigma']
         # end if
-        d_xx = func_compute_kernel_matrix(x, x, device_obj=self.device_obj, gamma=self.gamma,
-                                          normalize=self.normalize)
-        d_yy = func_compute_kernel_matrix(y, y, device_obj=self.device_obj, gamma=self.gamma,
-                                          normalize=self.normalize)
-        d_xy = func_compute_kernel_matrix(x, y, device_obj=self.device_obj, gamma=self.gamma,
-                                          normalize=self.normalize)
+        self.d_xx = func_compute_kernel_matrix(x, x, soft_dtw_generator=self.soft_dtw_generator)
+        self.d_yy = func_compute_kernel_matrix(y, y, soft_dtw_generator=self.soft_dtw_generator)
+        self.d_xy = func_compute_kernel_matrix(x, y, soft_dtw_generator=self.soft_dtw_generator)
         gamma = torch.div(1, (2 * torch.pow(log_sigma, 2)))
-        k_xx = torch.exp(-1 * gamma * torch.pow(d_xx, 2))
-        k_yy = torch.exp(-1 * gamma * torch.pow(d_yy, 2))
-        k_xy = torch.exp(-1 * gamma * torch.pow(d_xy, 2))
+        self.k_xx = torch.exp(-1 * gamma * torch.pow(self.d_xx, 2))
+        self.k_yy = torch.exp(-1 * gamma * torch.pow(self.d_yy, 2))
+        self.k_xy = torch.exp(-1 * gamma * torch.pow(self.d_xy, 2))
 
-        return KernelMatrixObject(k_xx, k_yy, k_xy)
+        return KernelMatrixObject(self.k_xx, self.k_yy, self.k_xy)
 
     def get_params(self, is_grad_param_only: bool = False) -> typing.Dict[str, torch.Tensor]:
         if is_grad_param_only:

@@ -21,8 +21,8 @@ def test_soft_dtw_single(resource_path_root):
 def test_soft_dtw_unit_time_sample(resource_path_root):
     len_x, len_y, dims = 400, 400, 5
     # input is (n-sample, n-time-series, n-features)
-    x_train = torch.normal(15, 0.9, (100, len_x, dims))
-    y_train = torch.normal(10, 0.5, (100, len_y, dims))
+    x_train = torch.normal(15, 0.9, (48, len_x, dims))
+    y_train = torch.normal(10, 0.5, (48, len_y, dims))
 
     x_val = torch.rand((5, 150, dims))
     y_val = torch.rand((5, 100, dims))
@@ -30,7 +30,7 @@ def test_soft_dtw_unit_time_sample(resource_path_root):
     kernel_function = kernels_torch.SoftDtwKernelFunctionTimeSample(gamma=0.1)
     trainer = ModelTrainerTorchBackend(MMD(kernel_function_obj=kernel_function, device_obj=device_obj),
                                            device_obj=device_obj)
-    trained_obj = trainer.train(x_train, y_train, num_epochs=100, batchsize=5, x_val=x_val, y_val=y_val,
+    trained_obj = trainer.train(x_train, y_train, num_epochs=1, batchsize=12, x_val=x_val, y_val=y_val,
                                 initial_scale=None)
     trainer.mmd_distance(x_val, y_val, is_detach=True)
 
