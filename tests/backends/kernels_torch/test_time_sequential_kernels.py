@@ -27,8 +27,8 @@ def test_soft_dtw_unit_time_sample(resource_path_root):
     x_train = torch.normal(15, 0.9, (x_sample, x_time_length))
     y_train = torch.normal(10, 0.5, (y_sample, y_time_length))
 
-    x_val = torch.rand((150, x_time_length))
-    y_val = torch.rand((100, y_time_length))
+    x_val = torch.rand((10, x_time_length))
+    y_val = torch.rand((10, y_time_length))
     device_obj = torch.device('cpu')
     kernel_function = kernels_torch.SoftDtwKernelFunctionTimeSample(gamma=0.1)
     trainer = ModelTrainerTorchBackend(MMD(kernel_function_obj=kernel_function, device_obj=device_obj),
@@ -37,7 +37,7 @@ def test_soft_dtw_unit_time_sample(resource_path_root):
     dataset_val = TwoSampleDataSet(x=x_val, y=y_val, device_obj=device_obj)
     trained_obj = trainer.train(dataset_training=dataset_train,
                                 dataset_validation=dataset_val,
-                                num_epochs=10, batchsize=30,
+                                num_epochs=50, batchsize=30,
                                 initial_scale=None)
     trainer.mmd_distance(x_val, y_val, is_detach=True)
 

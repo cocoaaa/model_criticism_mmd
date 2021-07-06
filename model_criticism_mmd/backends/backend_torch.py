@@ -359,6 +359,8 @@ class ModelTrainerTorchBackend(TrainerBase):
         optimizer = torch.optim.SGD(params_target, lr=lr, momentum=0.9, nesterov=True)
         # procedure of trainings
         x_val, y_val = dataset_validation.get_all_item()
+        # todo should be in batch. The val occupies too much memory.
+        # todo direct val-computation if val-tensor is small. Else, avg of val-tensor,
         val_mmd2_pq, val_stat, val_obj = self.forward(x_val, y_val, reg=reg, is_validation=True)
         logger.debug(
             f'Validation at 0. MMD^2 = {val_mmd2_pq.detach().cpu().numpy()}, '
