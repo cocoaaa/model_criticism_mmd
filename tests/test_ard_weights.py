@@ -1,6 +1,6 @@
 import torch
 
-from model_criticism_mmd import ModelTrainerTorchBackend, ModelTrainerTheanoBackend, MMD
+from model_criticism_mmd import ModelTrainerTorchBackend, ModelTrainerTheanoBackend, MMD, split_data
 from model_criticism_mmd.backends.kernels_torch import BasicRBFKernelFunction
 import numpy
 
@@ -34,6 +34,8 @@ def test_case_ard_weight():
         x = numpy.concatenate([numpy.reshape(x_1st_dim, (size, 1)), x_2_and_3_dim], axis=1)
         y = numpy.concatenate([numpy.reshape(y_1st_dim, (size, 1)), y_2_and_3_dim], axis=1)
 
+        dataset_train, dataset_validation = split_data(x=x, y=y, device_obj=device_obj)
+
         for n_dim in [0, 1, 2]:
             print(f'{n_dim+1} dim. mean(x)={x[:,n_dim].mean()} mean(y)={y[:,n_dim].mean()} var(x)={x[:,n_dim].var()} var(y)={y[:,n_dim].var()}')
         # end for
@@ -46,7 +48,8 @@ def test_case_ard_weight():
         mmd_estimator = MMD(
             kernel_function_obj=BasicRBFKernelFunction(device_obj=device_obj), device_obj=device_obj)
         trainer_torch = ModelTrainerTorchBackend(mmd_estimator=mmd_estimator, device_obj=device_obj)
-        trained_obj_torch = trainer_torch.train(x, y,
+        trained_obj_torch = trainer_torch.train(dataset_training=dataset_train,
+                                                dataset_validation=dataset_validation,
                                                 num_epochs=n_epoch,
                                                 batchsize=batch_size,
                                                 initial_scale=torch.tensor(init_scales))

@@ -278,15 +278,6 @@ class ModelTrainerTorchBackend(TrainerBase):
         return mmd2_pq, stat, obj
 
     @staticmethod
-    def to_tensor(data: np.ndarray) -> Tensor:
-        if isinstance(data, np.ndarray):
-            return torch.tensor(data)
-        elif isinstance(data, Tensor):
-            return data
-        else:
-            raise TypeError()
-
-    @staticmethod
     def log_message(epoch: int, avg_mmd2: Tensor, avg_obj: Tensor, val_mmd2_pq: Tensor,
                     val_stat: Tensor, val_obj: Tensor):
         fmt = ("{: >6,}: [avg train] MMD^2 {} obj {} "
@@ -303,6 +294,7 @@ class ModelTrainerTorchBackend(TrainerBase):
 
     def train(self,
               dataset_training: TwoSampleDataSet,
+              dataset_validation: TwoSampleDataSet,
               num_epochs: int = 1000,
               batchsize: int = 200,
               ratio_train: float = 0.8,
@@ -310,7 +302,6 @@ class ModelTrainerTorchBackend(TrainerBase):
               initial_scale: torch.Tensor = None,
               lr: float = 0.01,
               opt_log: bool = True,
-              dataset_validation: TwoSampleDataSet = None,
               num_workers: int = 1,
               is_scales_non_negative: bool = False,
               is_training_auto_stop: bool = False,

@@ -1,5 +1,8 @@
+import numpy
+
 from model_criticism_mmd.logger_unit import logger
 from model_criticism_mmd.backends.kernels_torch import BaseKernel
+
 import collections
 import dataclasses
 import numpy as np
@@ -8,6 +11,11 @@ import nptyping
 import os
 import pickle
 import torch
+
+
+MmdValues = collections.namedtuple('MmdValues', ('mmd', 'ratio'))
+TypeInputData = typing.Union[torch.Tensor, nptyping.NDArray[(typing.Any, typing.Any), typing.Any]]
+TypeScaleVector = nptyping.NDArray[(typing.Any, typing.Any), typing.Any]
 
 
 @dataclasses.dataclass
@@ -52,15 +60,18 @@ class TrainerBase(object):
     def mmd_distance(self, **kwargs):
         raise NotImplementedError()
 
+
 # todo save the data on storage, not on memory.
 class TwoSampleDataSet(torch.utils.data.Dataset):
     def __init__(self,
+                 x: TypeInputData,
+                 y: TypeInputData,
                  device_obj: torch.device,
-                 x: torch.Tensor,
-                 y: torch.Tensor,
                  value_padding: float = np.nan):
-        self.x = x
-        self.y = y
+        assert isinstance(x, (torch.Tensor, numpy.ndarray))
+        assert isinstance(y, (torch.Tensor, numpy.ndarray))
+        self.x = x if isinstance(x, torch.Tensor) else torch.tensor(x)
+        self.y = y if isinstance(y, torch.Tensor) else torch.tensor(y)
         self.length_x = len(x)
         self.length_y = len(y)
         self.value_padding = value_padding
@@ -99,8 +110,3 @@ class TwoSampleDataSet(torch.utils.data.Dataset):
             return max([self.length_x, self.length_y])
         else:
             return self.length_x
-
-
-MmdValues = collections.namedtuple('MmdValues', ('mmd', 'ratio'))
-TypeInputData = typing.Union[torch.Tensor, nptyping.NDArray[(typing.Any, typing.Any), typing.Any]]
-TypeScaleVector = nptyping.NDArray[(typing.Any, typing.Any), typing.Any]

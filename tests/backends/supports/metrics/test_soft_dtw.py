@@ -30,7 +30,7 @@ def timed_run(a, b, sdtw):
     return t, forward, grads
 
 
-def test_profile(batch_size, seq_len_a, seq_len_b, dims, tol_backward):
+def profile(batch_size, seq_len_a, seq_len_b, dims, tol_backward):
     if torch.cuda.is_available():
         sdtw_cuda = SoftDTW(True, gamma=1.0, normalize=False)
     # end if
@@ -75,6 +75,12 @@ def test_profile(batch_size, seq_len_a, seq_len_b, dims, tol_backward):
     print()
 
 
+def test_profile():
+    profile(128, 17, 15, 2, tol_backward=1e-6)
+    profile(512, 64, 64, 2, tol_backward=1e-4)
+    profile(512, 256, 256, 2, tol_backward=1e-3)
+
+
 def test_get_distance_matrix():
     batch_size, len_x, len_y, dims = 8, 15, 12, 5
     x = torch.rand((batch_size, len_x, dims), requires_grad=True)
@@ -89,6 +95,5 @@ def test_get_distance_matrix():
 if __name__ == "__main__":
     torch.manual_seed(1234)
     test_get_distance_matrix()
-    test_profile(128, 17, 15, 2, tol_backward=1e-6)
-    test_profile(512, 64, 64, 2, tol_backward=1e-4)
-    test_profile(512, 256, 256, 2, tol_backward=1e-3)
+    test_profile()
+
