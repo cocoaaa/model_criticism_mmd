@@ -82,11 +82,25 @@ class TwoSampleDataSet(torch.utils.data.Dataset):
         else:
             logger.debug(f'input data N(sample-size)={x.shape[0]}, N(dimension)={y.shape[1]}')
         # end if
-        assert x.shape[-1] == y.shape[-1]
-        self.size_dimension = x.shape[-1]
 
-    def get_dimension(self):
-        return self.size_dimension
+        if x.shape[-1] == y.shape[-1]:
+            self.size_dimension = x.shape[-1]
+            self.size_dimension_short = None
+        else:
+            logger.warning('The dimension size is different between x and y. '
+                           'Possible in some cases. You can ignore this message '
+                           'if the difference is as your intention.')
+            self.size_dimension = max(x.shape[-1], y.shape[-1])
+            self.size_dimension_short = min(x.shape[-1], y.shape[-1])
+
+    def get_dimension_x(self) -> int:
+        return self.x[-1]
+
+    def get_dimension_y(self):
+        return self.y[-1]
+
+    def get_dimension(self) -> typing.Tuple[int, typing.Optional[int]]:
+        return self.size_dimension, self.size_dimension_short
 
     def get_all_item(self) -> typing.Tuple[torch.Tensor, torch.Tensor]:
         return self.x, self.y

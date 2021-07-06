@@ -34,7 +34,7 @@ class SoftDTW(torch.nn.Module):
 
     def __del__(self):
         del self.D_xy
-        print('gc D_xy...')
+        # print('gc D_xy...')
         gc.collect()
 
     def _get_func_dtw(self, x, y):

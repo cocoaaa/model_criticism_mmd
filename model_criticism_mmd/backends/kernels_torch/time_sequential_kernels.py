@@ -1,4 +1,3 @@
-import logging
 import typing
 import torch
 from typing import Union
@@ -7,11 +6,13 @@ from model_criticism_mmd.logger_unit import logger
 from model_criticism_mmd.backends.kernels_torch.base import KernelMatrixObject
 from model_criticism_mmd.backends.kernels_torch.rbf_kernel import BasicRBFKernelFunction
 from model_criticism_mmd.supports.metrics.soft_dtw import SoftDTW
+from tslearn.metrics import soft_dtw
 
 FloatOrTensor = Union[float, torch.Tensor]
 device_default = torch.device('cpu')
 
 
+# todo wanna make this func speed up.
 def func_compute_kernel_matrix(x: torch.Tensor,
                                y: torch.Tensor,
                                soft_dtw_generator) -> torch.Tensor:
@@ -21,30 +22,22 @@ def func_compute_kernel_matrix(x: torch.Tensor,
         for i_col in range(i_row, y.shape[0]):
             x_sample = x[i_row]
             y_sample = y[i_col]
-            x_tensor = torch.unsqueeze(x_sample, 0)
-            y_tensor = torch.unsqueeze(y_sample, 0)
+            x_tensor = x_sample.view(1, -1, 1)
+            y_tensor = y_sample.view(1, -1, 1)
             __ = soft_dtw_generator.forward(x_tensor, y_tensor, is_return_matrix=False)
             mat[i_row, i_col] = __[0]
             # end if
         # end for
     # end for
     d_matrix = mat + mat.T - torch.diag(mat.diagonal())
-    d_matrix = d_matrix.clamp(0, None)
     return d_matrix
 
 
 class SoftDtwKernelFunctionTimeSample(BasicRBFKernelFunction):
     """A Kernel class when your data is temporal data.
-    Your data is matrix form, of which a sample is data at t=i.
 
-    In a column-direction, values show data "feature" of t=i.
-    In a row-direction, values show data "sample" of t=i.
-
-    In this class, distance-metric is an alignment cost of SoftDTW algorithm.
-    The alignment-cost is represented with matrix R which correspond to intermediary alignment costs.
-
-    The kernel is RBFKernel, thus the Eq of the class is
-    RbfKernel(x, y) = exp(-1 * (alignment-cost) / sigma)
+    k(x, y) = RBF-kernel(x, y) where
+    ||x-y|| of RBF-kernel is Soft-DTW, x, y \in R^n, 1d tensor.
     """
     def __init__(self,
                  gamma: float = 1.0,
@@ -52,15 +45,15 @@ class SoftDtwKernelFunctionTimeSample(BasicRBFKernelFunction):
                  normalize: bool = False,
                  device_obj: torch.device = device_default,
                  opt_sigma: bool = False,
-                 possible_shapes=(3,)):
+                 possible_shapes=(2,)):
         """
 
         Args:
             gamma: a parameter of SoftDTW
-            log_sigma:
-            normalize:
-            device_obj:
-            opt_sigma:
+            log_sigma: a sigma of RBF kernel
+            normalize: normalization of SoftDTW. normalization is valid only when x, y have the same number of samples.
+            device_obj: device object of torch.
+            opt_sigma: True or False.
         """
         self.gamma = gamma
         self.normalize = normalize
@@ -79,15 +72,16 @@ class SoftDtwKernelFunctionTimeSample(BasicRBFKernelFunction):
         else:
             log_sigma = kwargs['log_sigma']
         # end if
-        self.d_xx = func_compute_kernel_matrix(x, x, soft_dtw_generator=self.soft_dtw_generator)
-        self.d_yy = func_compute_kernel_matrix(y, y, soft_dtw_generator=self.soft_dtw_generator)
-        self.d_xy = func_compute_kernel_matrix(x, y, soft_dtw_generator=self.soft_dtw_generator)
-        gamma = torch.div(1, (2 * torch.pow(log_sigma, 2)))
-        self.k_xx = torch.exp(-1 * gamma * torch.pow(self.d_xx, 2))
-        self.k_yy = torch.exp(-1 * gamma * torch.pow(self.d_yy, 2))
-        self.k_xy = torch.exp(-1 * gamma * torch.pow(self.d_xy, 2))
 
-        return KernelMatrixObject(self.k_xx, self.k_yy, self.k_xy)
+        d_xx = func_compute_kernel_matrix(x, x, soft_dtw_generator=self.soft_dtw_generator)
+        d_yy = func_compute_kernel_matrix(y, y, soft_dtw_generator=self.soft_dtw_generator)
+        d_xy = func_compute_kernel_matrix(x, y, soft_dtw_generator=self.soft_dtw_generator)
+        gamma = torch.div(1, (2 * torch.pow(log_sigma, 2)))
+        k_xx = torch.exp(-1 * gamma * torch.pow(d_xx, 2))
+        k_yy = torch.exp(-1 * gamma * torch.pow(d_yy, 2))
+        k_xy = torch.exp(-1 * gamma * torch.pow(d_xy, 2))
+
+        return KernelMatrixObject(k_xx, k_yy, k_xy)
 
     def get_params(self, is_grad_param_only: bool = False) -> typing.Dict[str, torch.Tensor]:
         if is_grad_param_only:

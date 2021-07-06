@@ -130,8 +130,24 @@ class MMD(object):
     def operation_scale_product(scales: torch.Tensor,
                                 input_p: torch.Tensor,
                                 input_q: torch.Tensor) -> typing.Tuple[torch.Tensor, torch.Tensor]:
-        rep_p = torch.mul(scales, input_p)
-        rep_q = torch.mul(scales, input_q)
+        """Element-wise product. scales(1d tensor) * input_{p, q}(2d tensor)
+        Note: if input_{p, q} have different dimensions, we cut scales into the same size as input dimensions.
+
+        Args:
+            scales: 1d tensor
+            input_p: 2d tensor
+            input_q: 2d tensor
+
+        Returns: (2d tensor, 2d tensor)
+        """
+        if input_p.shape[-1] != input_q.shape[-1]:
+            scales_p = scales[0:input_p.shape[-1]]
+            scales_q = scales[0:input_q.shape[-1]]
+            rep_p = torch.mul(scales_p, input_p)
+            rep_q = torch.mul(scales_q, input_q)
+        else:
+            rep_p = torch.mul(scales, input_p)
+            rep_q = torch.mul(scales, input_q)
 
         return rep_p, rep_q
 
@@ -149,9 +165,6 @@ class MMD(object):
         self.kernel_function_obj.check_data_shape(y)
 
         if self.scales is not None:
-            assert len(self.scales) == x.shape[-1] == y.shape[-1],\
-            f'Error at scales vector. Dimension size does not match. ' \
-            f'The given scales {len(self.scales)}dims. x {x.shape[-1]}dims. y {y.shape[-1]}dims.'
             __x = torch.tensor(x) if isinstance(x, numpy.ndarray) else x
             __y = torch.tensor(y) if isinstance(x, numpy.ndarray) else y
             rep_x, rep_y = self.operation_scale_product(self.scales, __x, __y)
@@ -188,7 +201,9 @@ class ModelTrainerTorchBackend(TrainerBase):
                                           device_obj=device_obj), device_obj=device_obj)
         return model_obj
 
-    def init_scales(self, size_dimension: int, init_scale: torch.Tensor) -> torch.Tensor:
+    def init_scales(self,
+                    size_dimension: int,
+                    init_scale: torch.Tensor) -> torch.Tensor:
         """A scale vector which scales the input matrix X.
         must be the same size as the input data."""
 
@@ -334,7 +349,8 @@ class ModelTrainerTorchBackend(TrainerBase):
         assert num_epochs > 0
         assert dataset_training.get_dimension() == dataset_validation.get_dimension()
 
-        self.scales = self.init_scales(size_dimension=dataset_training.get_dimension(), init_scale=initial_scale)
+        dimension_longer: int = dataset_training.get_dimension()[0]
+        self.scales = self.init_scales(size_dimension=dimension_longer, init_scale=initial_scale)
         self.mmd_estimator.scales = self.scales
 
         # collects parameters to be optimized / set an optimizer
