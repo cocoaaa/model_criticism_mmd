@@ -2,6 +2,7 @@ import numpy
 import pathlib
 import torch
 from model_criticism_mmd import ModelTrainerTorchBackend, ModelTrainerTheanoBackend, MMD, kernels_torch
+from model_criticism_mmd.models import TwoSampleDataSet
 from collections import namedtuple
 
 OptimizationResult = namedtuple('OptimizationResult', ('x', 'y', 'theano', 'torch'))
@@ -40,6 +41,9 @@ def test_comparison(resource_path_root: pathlib.Path):
         x_val = x[80:]
         y_val = y[80:]
 
+        dataset_train = TwoSampleDataSet(x_train, y_train, torch.device('cpu'))
+        dataset_val = TwoSampleDataSet(x_val, y_val, torch.device('cpu'))
+
         # with sigma optimization
         trainer_theano = ModelTrainerTheanoBackend()
         trained_obj_theano = trainer_theano.train(x_train,
@@ -61,11 +65,10 @@ def test_comparison(resource_path_root: pathlib.Path):
                                       scales=torch.tensor(initial_scales))
         trainer_torch = ModelTrainerTorchBackend(mmd_estimator=mmd_estimator_sigma_opt,
                                                  device_obj=device_obj_torch)
-        trained_obj_torch = trainer_torch.train(x, y,
+        trained_obj_torch = trainer_torch.train(dataset_training=dataset_train,
                                                 num_epochs=n_epoch,
                                                 batchsize=batch_size,
-                                                x_val=x_val,
-                                                y_val=y_val,
+                                                dataset_validation=dataset_val,
                                                 initial_scale=torch.tensor(initial_scales),
                                                 opt_log=True)
         result_stacks_with_sigma.append(OptimizationResult(x, y, trained_obj_theano, trained_obj_torch))
@@ -86,7 +89,9 @@ def test_comparison(resource_path_root: pathlib.Path):
         mmd_estimator = MMD(kernels_torch.BasicRBFKernelFunction(opt_sigma=False, device_obj=device_obj_torch),
                             device_obj=device_obj_torch)
         trainer_torch = ModelTrainerTorchBackend(mmd_estimator=mmd_estimator, device_obj=device_obj_torch)
-        trained_obj_torch = trainer_torch.train(x, y, num_epochs=n_epoch, batchsize=batch_size, x_val=x_val, y_val=y_val)
+        trained_obj_torch = trainer_torch.train(dataset_training=dataset_train,
+                                                num_epochs=n_epoch,
+                                                batchsize=batch_size, dataset_validation=dataset_val)
         result_stacks_without_sigma.append(OptimizationResult(x, y, trained_obj_theano, trained_obj_torch))
     # end for
 

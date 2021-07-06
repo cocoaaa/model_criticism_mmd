@@ -1,16 +1,36 @@
 import logging
 import typing
 import torch
-from torch.nn.functional import normalize
 from typing import Union
 
 from model_criticism_mmd.logger_unit import logger
-from model_criticism_mmd.backends.kernels_torch.base import BaseKernel, KernelMatrixObject
+from model_criticism_mmd.backends.kernels_torch.base import KernelMatrixObject
 from model_criticism_mmd.backends.kernels_torch.rbf_kernel import BasicRBFKernelFunction
 from model_criticism_mmd.supports.metrics.soft_dtw import SoftDTW
 
 FloatOrTensor = Union[float, torch.Tensor]
 device_default = torch.device('cpu')
+
+
+def func_compute_kernel_matrix(x: torch.Tensor,
+                               y: torch.Tensor,
+                               soft_dtw_generator) -> torch.Tensor:
+
+    mat = torch.zeros((x.shape[0], y.shape[0]))
+    for i_row in range(x.shape[0]):
+        for i_col in range(i_row, y.shape[0]):
+            x_sample = x[i_row]
+            y_sample = y[i_col]
+            x_tensor = torch.unsqueeze(x_sample, 0)
+            y_tensor = torch.unsqueeze(y_sample, 0)
+            __ = soft_dtw_generator.forward(x_tensor, y_tensor, is_return_matrix=False)
+            mat[i_row, i_col] = __[0]
+            # end if
+        # end for
+    # end for
+    d_matrix = mat + mat.T - torch.diag(mat.diagonal())
+    d_matrix = d_matrix.clamp(0, None)
+    return d_matrix
 
 
 class SoftDtwKernelFunctionTimeSample(BasicRBFKernelFunction):
@@ -28,10 +48,11 @@ class SoftDtwKernelFunctionTimeSample(BasicRBFKernelFunction):
     """
     def __init__(self,
                  gamma: float = 1.0,
-                 log_sigma: Union[float, torch.Tensor] = 0.0,
+                 log_sigma: Union[float, torch.Tensor] = 100,
                  normalize: bool = False,
                  device_obj: torch.device = device_default,
-                 opt_sigma: bool = False):
+                 opt_sigma: bool = False,
+                 possible_shapes=(3,)):
         """
 
         Args:
@@ -43,62 +64,30 @@ class SoftDtwKernelFunctionTimeSample(BasicRBFKernelFunction):
         """
         self.gamma = gamma
         self.normalize = normalize
-        self.log_sigma = torch.tensor(log_sigma) if isinstance(log_sigma, float) else log_sigma
-        self.soft_dtw = SoftDTW(use_cuda=True if device_obj.type == 'cuda' else False, gamma=gamma, normalize=False)
+        self.log_sigma = torch.tensor([log_sigma]) if isinstance(log_sigma, float) else log_sigma
         self.opt_sigma = opt_sigma
-        super().__init__(device_obj=device_obj)
+        super().__init__(device_obj=device_obj, possible_shapes=possible_shapes, log_sigma=log_sigma)
+        self.soft_dtw_generator = SoftDTW(use_cuda=True if device_obj.type == 'cuda' else False,
+                                          gamma=gamma, normalize=normalize)
 
     def compute_kernel_matrix(self, x: torch.Tensor, y: torch.Tensor, **kwargs) -> KernelMatrixObject:
         assert isinstance(x, torch.Tensor)
         assert isinstance(y, torch.Tensor)
-
-        if 'is_validation' in kwargs and kwargs['is_validation'] is True:
-            # if phrase is in validation, sample-size might be different. Set validation sample with the small-size.
-            validation_smaller = min(x.shape[0], y.shape[0])
-            x = x[:validation_smaller, :]
-            y = y[:validation_smaller, :]
-        # end if
-
-        if len(x[torch.isnan(x)]) > 0:
-            x_input = x[~torch.any(torch.isnan(x), dim=1)]
-            logger.debug('Deleted padding samples')
-            assert len(x_input) > 0, f'{x_input.shape}'
-        else:
-            x_input = x
-        if len(y[torch.isnan(y)]) > 0:
-            y_input = y[~torch.any(torch.isnan(y), dim=1)]
-            logger.debug('Deleted padding samples')
-            assert len(y_input) > 0, f'{y_input.shape}'
-        else:
-            y_input = y
-        # end if
 
         if 'log_sigma' not in kwargs:
             log_sigma = self.log_sigma
         else:
             log_sigma = kwargs['log_sigma']
         # end if
-        sigma = torch.exp(log_sigma)
-        gamma = torch.div(1, (2 * torch.pow(sigma, 2)))
+        self.d_xx = func_compute_kernel_matrix(x, x, soft_dtw_generator=self.soft_dtw_generator)
+        self.d_yy = func_compute_kernel_matrix(y, y, soft_dtw_generator=self.soft_dtw_generator)
+        self.d_xy = func_compute_kernel_matrix(x, y, soft_dtw_generator=self.soft_dtw_generator)
+        gamma = torch.div(1, (2 * torch.pow(log_sigma, 2)))
+        self.k_xx = torch.exp(-1 * gamma * torch.pow(self.d_xx, 2))
+        self.k_yy = torch.exp(-1 * gamma * torch.pow(self.d_yy, 2))
+        self.k_xy = torch.exp(-1 * gamma * torch.pow(self.d_xy, 2))
 
-        __x = x_input.unsqueeze(0) if len(x_input.size()) == 2 else x
-        __y = y_input.unsqueeze(0) if len(y_input.size()) == 2 else y
-
-        soft_dt_xx = torch.pow(self.soft_dtw.forward(__x, __x, is_return_matrix=True), 2)
-        soft_dt_xy = torch.pow(self.soft_dtw.forward(__x, __y, is_return_matrix=True), 2)
-        soft_dt_yy = torch.pow(self.soft_dtw.forward(__y, __y, is_return_matrix=True), 2)
-
-        if self.normalize:
-            soft_dt_xx = normalize(soft_dt_xx, dim=0)
-            soft_dt_xy = normalize(soft_dt_xy, dim=0)
-            soft_dt_yy = normalize(soft_dt_yy, dim=0)
-        # end if
-
-        k_xx = torch.exp(-1 * gamma * soft_dt_xx).squeeze(0)
-        k_yy = torch.exp(-1 * gamma * soft_dt_yy).squeeze(0)
-        k_xy = torch.exp(-1 * gamma * soft_dt_xy).squeeze(0)
-
-        return KernelMatrixObject(k_xx, k_yy, k_xy)
+        return KernelMatrixObject(self.k_xx, self.k_yy, self.k_xy)
 
     def get_params(self, is_grad_param_only: bool = False) -> typing.Dict[str, torch.Tensor]:
         if is_grad_param_only:

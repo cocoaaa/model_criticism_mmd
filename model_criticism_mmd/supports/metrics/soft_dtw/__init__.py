@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from ._soft_dtw_cuda import _SoftDTWCUDA, compute_softdtw_cuda
 from ._soft_dtw import _SoftDTW, compute_softdtw
+import gc
 
 
 class SoftDTW(torch.nn.Module):
@@ -30,6 +31,11 @@ class SoftDTW(torch.nn.Module):
             self.dist_func = dist_func
         else:
             self.dist_func = SoftDTW._euclidean_dist_func
+
+    def __del__(self):
+        del self.D_xy
+        print('gc D_xy...')
+        gc.collect()
 
     def _get_func_dtw(self, x, y):
         """
@@ -86,5 +92,5 @@ class SoftDTW(torch.nn.Module):
             out_xy, out_xx, out_yy = torch.split(out, X.shape[0])
             return out_xy - 1 / 2 * (out_xx + out_yy)
         else:
-            D_xy = self.dist_func(X, Y)
-            return func_dtw(D_xy, self.gamma, self.bandwidth, is_return_matrix, initial_value)
+            self.D_xy = self.dist_func(X, Y)
+            return func_dtw(self.D_xy, self.gamma, self.bandwidth, is_return_matrix, initial_value)

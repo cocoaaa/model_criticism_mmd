@@ -20,14 +20,15 @@ class BasicRBFKernelFunction(BaseKernel):
     def __init__(self,
                  device_obj: torch.device = device_default,
                  log_sigma: Union[float, torch.Tensor] = 0.0,
-                 opt_sigma: bool = False):
+                 opt_sigma: bool = False,
+                 possible_shapes: typing.Tuple[int, ...] = (2,)):
         """
         Args:
             device_obj: torch.device object.
             log_sigma: sigma parameter of RBF kernel
             opt_sigma: if True, then sigma parameter will be optimized during training. False, not.
         """
-        super().__init__(device_obj=device_obj)
+        super().__init__(device_obj=device_obj, possible_shapes=possible_shapes)
         self.device_obj = device_obj
         self.opt_sigma = opt_sigma
         self.log_sigma = torch.tensor([log_sigma], requires_grad=opt_sigma, device=device_obj)
