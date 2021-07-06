@@ -52,6 +52,54 @@ class TrainerBase(object):
     def mmd_distance(self, **kwargs):
         raise NotImplementedError()
 
+# todo save the data on storage, not on memory.
+class TwoSampleDataSet(torch.utils.data.Dataset):
+    def __init__(self,
+                 device_obj: torch.device,
+                 x: torch.Tensor,
+                 y: torch.Tensor,
+                 value_padding: float = np.nan):
+        self.x = x
+        self.y = y
+        self.length_x = len(x)
+        self.length_y = len(y)
+        self.value_padding = value_padding
+        self.device_obj = device_obj
+        if self.length_x != self.length_y:
+            logger.warning(f'x and y has different sample size. '
+                           f'I do not guarantee correct behaviors of training-process.')
+        else:
+            logger.debug(f'input data N(sample-size)={x.shape[0]}, N(dimension)={y.shape[1]}')
+        # end if
+        assert x.shape[-1] == y.shape[-1]
+        self.size_dimension = x.shape[-1]
+
+    def get_dimension(self):
+        return self.size_dimension
+
+    def get_all_item(self) -> typing.Tuple[torch.Tensor, torch.Tensor]:
+        return self.x, self.y
+
+    def __getitem__(self, index):
+        if index >= self.length_x:
+            empty_array = np.empty(self.y[index].shape)
+            empty_array[:] = self.value_padding
+            return torch.tensor(empty_array), self.y[index]
+        elif index >= self.length_y:
+            empty_array = np.empty(self.x[index].shape)
+            empty_array[:] = self.value_padding
+            return self.x[index], torch.tensor(empty_array)
+        elif index > self.length_x and self.length_y:
+            raise Exception()
+        else:
+            return self.x[index], self.y[index]
+
+    def __len__(self):
+        if self.length_x != self.length_y:
+            return max([self.length_x, self.length_y])
+        else:
+            return self.length_x
+
 
 MmdValues = collections.namedtuple('MmdValues', ('mmd', 'ratio'))
 TypeInputData = typing.Union[torch.Tensor, nptyping.NDArray[(typing.Any, typing.Any), typing.Any]]

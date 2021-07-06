@@ -5,50 +5,13 @@ import typing
 from torch.utils.data import Dataset
 from torch import Tensor
 from model_criticism_mmd.logger_unit import logger
-from model_criticism_mmd.models import TrainingLog, TrainedMmdParameters, TrainerBase, MmdValues, TypeInputData
+from model_criticism_mmd.models import TrainingLog, TrainedMmdParameters, TrainerBase, MmdValues, TypeInputData, \
+    TwoSampleDataSet
 from model_criticism_mmd.backends import kernels_torch
+from model_criticism_mmd.exceptions import NanException
 
 device_default = torch.device('cpu')
 
-
-class NanException(Exception):
-    pass
-
-
-class TwoSampleDataSet(torch.utils.data.Dataset):
-    def __init__(self, x: torch.Tensor, y: torch.Tensor, value_padding: float = np.nan):
-        self.x = x
-        self.y = y
-        self.length_x = len(x)
-        self.length_y = len(y)
-        self.value_padding = value_padding
-        if self.length_x != self.length_y:
-            logger.warning(f'x and y has different sample size. '
-                           f'I do not guarantee correct behaviors of training-process.')
-
-    def __getitem__(self, index):
-        if index >= self.length_x:
-            empty_array = numpy.empty(self.y[index].shape)
-            empty_array[:] = self.value_padding
-            return torch.tensor(empty_array), self.y[index]
-        elif index >= self.length_y:
-            empty_array = numpy.empty(self.x[index].shape)
-            empty_array[:] = self.value_padding
-            return self.x[index], torch.tensor(empty_array)
-        elif index > self.length_x and self.length_y:
-            raise Exception()
-        else:
-            return self.x[index], self.y[index]
-
-    def __len__(self):
-        if self.length_x != self.length_y:
-            return max([self.length_x, self.length_y])
-        else:
-            return self.length_x
-
-
-# ----------------------------------------------------------------------
-# MMD equation
 
 class MMD(object):
     def __init__(self,
@@ -204,10 +167,6 @@ class MMD(object):
             return MmdValues(mmd2, ratio)
 
 
-# ----------------------------------------------------------------------
-
-
-
 class ModelTrainerTorchBackend(TrainerBase):
     """A class to optimize MMD."""
     def __init__(self,
@@ -229,15 +188,14 @@ class ModelTrainerTorchBackend(TrainerBase):
                                           device_obj=device_obj), device_obj=device_obj)
         return model_obj
 
-    def init_scales(self, data: torch.Tensor, init_scale: torch.Tensor) -> torch.Tensor:
+    def init_scales(self, size_dimension: int, init_scale: torch.Tensor) -> torch.Tensor:
         """A scale vector which scales the input matrix X.
         must be the same size as the input data."""
 
         if init_scale is None:
-            scales: torch.Tensor = torch.rand(size=(data.shape[-1],), requires_grad=True, device=self.device_obj)
+            scales: torch.Tensor = torch.rand(size=(size_dimension,), requires_grad=True, device=self.device_obj)
         else:
             logger.info('Set the initial scales value')
-            assert data.shape[1] == init_scale.shape[0]
             scales = torch.tensor(init_scale.clone().detach().cpu(), requires_grad=True, device=self.device_obj)
         # end if
         return scales
@@ -271,10 +229,8 @@ class ModelTrainerTorchBackend(TrainerBase):
             total_obj += obj
             n_batches += 1
             # do differentiation now.
-            print('backward start')
             obj.backward()
             #
-            print('updating...')
             optimizer.step()
             if len(self.scales[torch.isnan(self.scales)]):
                 raise NanException('scales vector goes into Nan. Stop training.')
@@ -284,18 +240,6 @@ class ModelTrainerTorchBackend(TrainerBase):
                     self.scales[:] = self.scales.clamp(0, None)
                 # end with
             # end if
-            print('gc...')
-            del xbatch
-            del ybatch
-            del self.mmd_estimator.kernel_function_obj.d_xx
-            del self.mmd_estimator.kernel_function_obj.d_yy
-            del self.mmd_estimator.kernel_function_obj.d_xy
-            del self.mmd_estimator.kernel_function_obj.k_xx
-            del self.mmd_estimator.kernel_function_obj.k_yy
-            del self.mmd_estimator.kernel_function_obj.k_xy
-            self.mmd_estimator.kernel_function_obj.soft_dtw_generator.__del__()
-            import gc
-            gc.collect()
         # end for
         avg_mmd2 = torch.div(total_mmd2, n_batches)
         avg_obj = torch.div(total_obj, n_batches)
@@ -342,36 +286,6 @@ class ModelTrainerTorchBackend(TrainerBase):
         else:
             raise TypeError()
 
-    def split_data(self,
-                   x: TypeInputData,
-                   y: TypeInputData,
-                   x_val: typing.Optional[TypeInputData],
-                   y_val: typing.Optional[TypeInputData],
-                   ratio_train: float = 0.8
-                   ) -> typing.Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        # data conversion
-        x__ = self.to_tensor(x)
-        y__ = self.to_tensor(y)
-
-        if ratio_train < 1.0:
-            __split_index = int(len(x) * ratio_train)
-            x_train__ = x__[:__split_index]
-            x_val__ = x__[__split_index:]
-            y_train__ = y__[:__split_index]
-            y_val__ = y__[__split_index:]
-        else:
-            x_train__ = x__
-            y_train__ = y__
-            x_val__ = self.to_tensor(x_val)
-            y_val__ = self.to_tensor(y_val)
-        # end if
-        x_train__d = x_train__.to(self.device_obj)
-        y_train__d = y_train__.to(self.device_obj)
-        x_val__d = x_val__.to(self.device_obj)
-        y_val__d = y_val__.to(self.device_obj)
-
-        return x_train__d, y_train__d, x_val__d, y_val__d
-
     @staticmethod
     def log_message(epoch: int, avg_mmd2: Tensor, avg_obj: Tensor, val_mmd2_pq: Tensor,
                     val_stat: Tensor, val_obj: Tensor):
@@ -388,8 +302,7 @@ class ModelTrainerTorchBackend(TrainerBase):
         # end if
 
     def train(self,
-              x_train: TypeInputData,
-              y_train: TypeInputData,
+              dataset_training: TwoSampleDataSet,
               num_epochs: int = 1000,
               batchsize: int = 200,
               ratio_train: float = 0.8,
@@ -397,8 +310,7 @@ class ModelTrainerTorchBackend(TrainerBase):
               initial_scale: torch.Tensor = None,
               lr: float = 0.01,
               opt_log: bool = True,
-              x_val: TypeInputData = None,
-              y_val: TypeInputData = None,
+              dataset_validation: TwoSampleDataSet = None,
               num_workers: int = 1,
               is_scales_non_negative: bool = False,
               is_training_auto_stop: bool = False,
@@ -408,8 +320,7 @@ class ModelTrainerTorchBackend(TrainerBase):
         """Training (Optimization) of MMD parameters.
 
         Args:
-            x_train: data
-            y_train: data
+            dataset_training:
             num_epochs: #epochs.
             batchsize: batch size
             ratio_train: a ratio of division for training
@@ -417,8 +328,7 @@ class ModelTrainerTorchBackend(TrainerBase):
             initial_scale: initial value of scales vector. If None, the vector is initialized randomly.
             lr: learning rate
             opt_log: flag to control training procedure. If True, then objective-value has lower-bound. else Not.
-            x_val: data for validation. If None, the data is picked from x_train.
-            y_val: same as x_val.
+            dataset_validation:
             num_workers: #worker for training.
             is_scales_non_negative: if True then scales set non-negative. if False, no control.
             is_training_auto_stop: if True, then training is auto-stopped. if False, no auto-stop.
@@ -430,16 +340,10 @@ class ModelTrainerTorchBackend(TrainerBase):
         Returns:
             TrainedMmdParameters
         """
-        # todo epoch auto-stop.
         assert num_epochs > 0
-        logger.debug(f'input data N(sample-size)={x_train.shape[0]}, N(dimension)={x_train.shape[1]}')
+        assert dataset_training.get_dimension() == dataset_validation.get_dimension()
 
-        if x_val is None or y_val is None:
-            x_train__, y_train__, x_val__, y_val__ = self.split_data(x_train, y_train, None, None, ratio_train)
-        else:
-            x_train__, y_train__, x_val__, y_val__ = self.split_data(x_train, y_train, x_val, y_val, 1.0)
-        # end if
-        self.scales = self.init_scales(data=x_train__, init_scale=initial_scale)
+        self.scales = self.init_scales(size_dimension=dataset_training.get_dimension(), init_scale=initial_scale)
         self.mmd_estimator.scales = self.scales
 
         # collects parameters to be optimized / set an optimizer
@@ -447,8 +351,8 @@ class ModelTrainerTorchBackend(TrainerBase):
         params_target = [self.scales] + list(kernel_params_target.values())
         optimizer = torch.optim.SGD(params_target, lr=lr, momentum=0.9, nesterov=True)
         # procedure of trainings
-        dataset_train = TwoSampleDataSet(x_train__, y_train__)
-        val_mmd2_pq, val_stat, val_obj = self.forward(x_val__, y_val__, reg=reg, is_validation=True)
+        x_val, y_val = dataset_validation.get_all_item()
+        val_mmd2_pq, val_stat, val_obj = self.forward(x_val, y_val, reg=reg, is_validation=True)
         logger.debug(
             f'Validation at 0. MMD^2 = {val_mmd2_pq.detach().cpu().numpy()}, '
             f'ratio = {val_stat.detach().cpu().numpy()} '
@@ -458,13 +362,13 @@ class ModelTrainerTorchBackend(TrainerBase):
         for epoch in range(1, num_epochs + 1):
             optimizer.zero_grad()
             avg_mmd2, avg_obj = self.run_train_epoch(optimizer,
-                                                     dataset_train,
+                                                     dataset_training,
                                                      batchsize=batchsize,
                                                      reg=reg,
                                                      num_workers=num_workers,
                                                      is_scales_non_negative=is_scales_non_negative,
                                                      is_shuffle=is_shuffle)
-            val_mmd2_pq, val_stat, val_obj = self.forward(x_val__, y_val__, reg=reg, is_validation=True)
+            val_mmd2_pq, val_stat, val_obj = self.forward(x_val, y_val, reg=reg, is_validation=True)
             training_log.append(TrainingLog(epoch,
                                             avg_mmd2.detach().cpu().numpy(),
                                             avg_obj.detach().cpu().numpy(),
