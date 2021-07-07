@@ -215,6 +215,58 @@ class ModelTrainerTorchBackend(TrainerBase):
         # end if
         return scales
 
+    def run_validation(self,
+                       dataset_validation: TwoSampleDataSet,
+                       reg: torch.Tensor,
+                       batchsize: int,
+                       num_workers: int,
+                       is_shuffle: bool = False,
+                       is_validation_all: bool = False
+                       ) -> typing.Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """A procedure for validations
+        """
+        if is_validation_all:
+            x_val, y_val = dataset_validation.get_all_item()
+            val_mmd2_pq, val_stat, val_obj = self.forward(x_val, y_val, reg=reg, is_validation=True)
+            logger.debug(
+                f'Validation at 0. MMD^2 = {val_mmd2_pq.detach().cpu().numpy()}, '
+                f'ratio = {val_stat.detach().cpu().numpy()} '
+                f'obj = {val_obj.detach().cpu().numpy()}')
+            return val_mmd2_pq, val_obj, val_stat
+        else:
+            total_mmd2_val = 0
+            total_obj_val = 0
+            total_stat_val = 0
+            n_batches = 0
+            if self.device_obj == torch.device('cpu'):
+                data_loader = torch.utils.data.DataLoader(dataset_validation,
+                                                          batch_size=batchsize, shuffle=is_shuffle,
+                                                          num_workers=num_workers)
+            else:
+                data_loader = torch.utils.data.DataLoader(dataset_validation,
+                                                          batch_size=batchsize, shuffle=is_shuffle)
+            # end if
+            for xbatch, ybatch in data_loader:
+                mmd2_pq, stat, obj = self.forward(xbatch, ybatch, reg=reg)
+                # end if
+                assert np.isfinite(mmd2_pq.detach().cpu().numpy())
+                assert np.isfinite(obj.detach().cpu().numpy())
+                total_mmd2_val += mmd2_pq
+                total_obj_val += obj
+                total_stat_val += stat
+                n_batches += 1
+            # end for
+            avg_mmd2 = torch.div(total_mmd2_val, n_batches)
+            avg_obj = torch.div(total_obj_val, n_batches)
+            avg_stat = torch.div(total_stat_val, n_batches)
+
+            logger.debug(
+                f'Validation(mean over batch) at 0. '
+                f'MMD^2 = {avg_mmd2.detach().cpu().numpy()}, '
+                f'ratio = {avg_stat.detach().cpu().numpy()} '
+                f'obj = {avg_obj.detach().cpu().numpy()}')
+            return avg_mmd2, avg_obj, avg_stat
+
     def run_train_epoch(self,
                         optimizer: torch.optim.SGD,
                         dataset: TwoSampleDataSet,
@@ -322,7 +374,8 @@ class ModelTrainerTorchBackend(TrainerBase):
               is_training_auto_stop: bool = False,
               auto_stop_epochs: int = 10,
               auto_stop_threshold: float = 0.00001,
-              is_shuffle: bool = False) -> TrainedMmdParameters:
+              is_shuffle: bool = False,
+              is_validation_all: bool = False) -> TrainedMmdParameters:
         """Training (Optimization) of MMD parameters.
 
         Args:
@@ -343,6 +396,8 @@ class ModelTrainerTorchBackend(TrainerBase):
             auto_stop_threshold: The threshold to stop trainings automatically.
             is_shuffle: Dataset will be selected randomly or NOT. if True, then sample is selected randomly.
             if False, selected sequentially.
+            is_validation_all: True, if you'd like to run validations with batch=1.
+            False, then val. values will be averaged with the same batch-size of a training.
         Returns:
             TrainedMmdParameters
         """
@@ -357,16 +412,9 @@ class ModelTrainerTorchBackend(TrainerBase):
         kernel_params_target = self.mmd_estimator.kernel_function_obj.get_params(is_grad_param_only=True)
         params_target = [self.scales] + list(kernel_params_target.values())
         optimizer = torch.optim.SGD(params_target, lr=lr, momentum=0.9, nesterov=True)
-        # procedure of trainings
-        x_val, y_val = dataset_validation.get_all_item()
-        # todo should be in batch. The val occupies too much memory.
-        # todo direct val-computation if val-tensor is small. Else, avg of val-tensor,
-        val_mmd2_pq, val_stat, val_obj = self.forward(x_val, y_val, reg=reg, is_validation=True)
-        logger.debug(
-            f'Validation at 0. MMD^2 = {val_mmd2_pq.detach().cpu().numpy()}, '
-            f'ratio = {val_stat.detach().cpu().numpy()} '
-            f'obj = {val_obj.detach().cpu().numpy()}')
 
+        self.run_validation(dataset_validation, reg, batchsize, num_workers, is_shuffle, is_validation_all)
+        # procedure of trainings
         training_log = []
         for epoch in range(1, num_epochs + 1):
             optimizer.zero_grad()
@@ -377,12 +425,17 @@ class ModelTrainerTorchBackend(TrainerBase):
                                                      num_workers=num_workers,
                                                      is_scales_non_negative=is_scales_non_negative,
                                                      is_shuffle=is_shuffle)
-            val_mmd2_pq, val_stat, val_obj = self.forward(x_val, y_val, reg=reg, is_validation=True)
-            training_log.append(TrainingLog(epoch,
-                                            avg_mmd2.detach().cpu().numpy(),
-                                            avg_obj.detach().cpu().numpy(),
-                                            val_mmd2_pq.detach().cpu().numpy(),
-                                            val_obj.detach().cpu().numpy(),
+            val_mmd2_pq, val_obj, val_stat = self.run_validation(dataset_validation=dataset_validation,
+                                                                 reg=reg,
+                                                                 batchsize=batchsize,
+                                                                 num_workers=num_workers,
+                                                                 is_shuffle=is_shuffle,
+                                                                 is_validation_all=is_validation_all)
+            training_log.append(TrainingLog(epoch=epoch,
+                                            avg_mmd_training=avg_mmd2.detach().cpu().numpy(),
+                                            avg_obj_train=avg_obj.detach().cpu().numpy(),
+                                            mmd_validation=val_mmd2_pq.detach().cpu().numpy(),
+                                            obj_validation=val_obj.detach().cpu().numpy(),
                                             sigma=None,
                                             scales=self.scales.detach().cpu().numpy()))
             self.log_message(epoch, avg_mmd2, avg_obj, val_mmd2_pq, val_stat, val_obj)
