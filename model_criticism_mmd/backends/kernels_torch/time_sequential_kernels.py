@@ -13,10 +13,11 @@ device_default = torch.device('cpu')
 
 
 # todo wanna make this func speed up.
-def func_compute_kernel_matrix(x: torch.Tensor,
-                               y: torch.Tensor,
-                               soft_dtw_generator) -> torch.Tensor:
-
+def func_compute_kernel_matrix_square(x: torch.Tensor,
+                                      y: torch.Tensor,
+                                      soft_dtw_generator) -> torch.Tensor:
+    """Distance matrix only when x and y have the same number of data.
+    Less computation thanks to a triangular matrix."""
     mat = torch.zeros((x.shape[0], y.shape[0]))
     for i_row in range(x.shape[0]):
         for i_col in range(i_row, y.shape[0]):
@@ -31,6 +32,25 @@ def func_compute_kernel_matrix(x: torch.Tensor,
     # end for
     d_matrix = mat + mat.T - torch.diag(mat.diagonal())
     return d_matrix
+
+
+def func_compute_kernel_matrix_generic(x: torch.Tensor,
+                                       y: torch.Tensor,
+                                       soft_dtw_generator) -> torch.Tensor:
+    """Get a distance matrix"""
+    mat = torch.zeros((x.shape[0], y.shape[0]))
+    for i_row, x_sample in enumerate(x):
+        for i_col, y_sample in enumerate(y):
+            x_tensor = x_sample.view(1, -1, 1)
+            y_tensor = y_sample.view(1, -1, 1)
+            __ = soft_dtw_generator.forward(x_tensor, y_tensor, is_return_matrix=False)
+            mat[i_row, i_col] = __[0]
+            # end if
+        # end for
+    # end for
+    return mat
+
+
 
 
 class SoftDtwKernelFunctionTimeSample(BasicRBFKernelFunction):
@@ -73,9 +93,13 @@ class SoftDtwKernelFunctionTimeSample(BasicRBFKernelFunction):
             log_sigma = kwargs['log_sigma']
         # end if
 
-        d_xx = func_compute_kernel_matrix(x, x, soft_dtw_generator=self.soft_dtw_generator)
-        d_yy = func_compute_kernel_matrix(y, y, soft_dtw_generator=self.soft_dtw_generator)
-        d_xy = func_compute_kernel_matrix(x, y, soft_dtw_generator=self.soft_dtw_generator)
+        d_xx = func_compute_kernel_matrix_square(x, x, soft_dtw_generator=self.soft_dtw_generator)
+        d_yy = func_compute_kernel_matrix_square(y, y, soft_dtw_generator=self.soft_dtw_generator)
+        if x.shape[0] == y.shape[0]:
+            d_xy = func_compute_kernel_matrix_square(x, y, soft_dtw_generator=self.soft_dtw_generator)
+        else:
+            d_xy = func_compute_kernel_matrix_generic(x, y, soft_dtw_generator=self.soft_dtw_generator)
+        # end if
         gamma = torch.div(1, (2 * torch.pow(log_sigma, 2)))
         k_xx = torch.exp(-1 * gamma * torch.pow(d_xx, 2))
         k_yy = torch.exp(-1 * gamma * torch.pow(d_yy, 2))

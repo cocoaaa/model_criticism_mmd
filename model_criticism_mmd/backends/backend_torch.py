@@ -9,6 +9,7 @@ from model_criticism_mmd.models import TrainingLog, TrainedMmdParameters, Traine
     TwoSampleDataSet
 from model_criticism_mmd.backends import kernels_torch
 from model_criticism_mmd.exceptions import NanException
+import gc
 
 device_default = torch.device('cpu')
 
@@ -221,17 +222,20 @@ class ModelTrainerTorchBackend(TrainerBase):
                        batchsize: int,
                        num_workers: int,
                        is_shuffle: bool = False,
-                       is_validation_all: bool = False
+                       is_validation_all: bool = False,
+                       is_first_iter: bool = False,
+                       is_gc: bool = False
                        ) -> typing.Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """A procedure for validations
         """
         if is_validation_all:
             x_val, y_val = dataset_validation.get_all_item()
             val_mmd2_pq, val_stat, val_obj = self.forward(x_val, y_val, reg=reg, is_validation=True)
-            logger.debug(
-                f'Validation at 0. MMD^2 = {val_mmd2_pq.detach().cpu().numpy()}, '
-                f'ratio = {val_stat.detach().cpu().numpy()} '
-                f'obj = {val_obj.detach().cpu().numpy()}')
+            if is_first_iter:
+                logger.info(
+                    f'Validation at 0. MMD^2 = {val_mmd2_pq.detach().cpu().numpy()}, '
+                    f'ratio = {val_stat.detach().cpu().numpy()} '
+                    f'obj = {val_obj.detach().cpu().numpy()}')
             return val_mmd2_pq, val_obj, val_stat
         else:
             total_mmd2_val = 0
@@ -255,16 +259,22 @@ class ModelTrainerTorchBackend(TrainerBase):
                 total_obj_val += obj
                 total_stat_val += stat
                 n_batches += 1
+                if is_gc:
+                    del mmd2_pq, obj, stat
+                    del xbatch, ybatch
+                    gc.collect()
+                # end if
             # end for
             avg_mmd2 = torch.div(total_mmd2_val, n_batches)
             avg_obj = torch.div(total_obj_val, n_batches)
             avg_stat = torch.div(total_stat_val, n_batches)
 
-            logger.debug(
-                f'Validation(mean over batch) at 0. '
-                f'MMD^2 = {avg_mmd2.detach().cpu().numpy()}, '
-                f'ratio = {avg_stat.detach().cpu().numpy()} '
-                f'obj = {avg_obj.detach().cpu().numpy()}')
+            if is_first_iter:
+                logger.info(
+                    f'Validation(mean over batch) at 0. '
+                    f'MMD^2 = {avg_mmd2.detach().cpu().numpy()}, '
+                    f'ratio = {avg_stat.detach().cpu().numpy()} '
+                    f'obj = {avg_obj.detach().cpu().numpy()}')
             return avg_mmd2, avg_obj, avg_stat
 
     def run_train_epoch(self,
@@ -275,6 +285,7 @@ class ModelTrainerTorchBackend(TrainerBase):
                         num_workers: int = 1,
                         is_scales_non_negative: bool = False,
                         is_shuffle: bool = False,
+                        is_gc: bool = False
                         ) -> typing.Tuple[torch.Tensor, torch.Tensor]:
         total_mmd2 = 0
         total_obj = 0
@@ -299,6 +310,11 @@ class ModelTrainerTorchBackend(TrainerBase):
             obj.backward()
             #
             optimizer.step()
+            if is_gc:
+                del mmd2_pq, obj, stat
+                del xbatch, ybatch
+                gc.collect()
+            # end if
             if len(self.scales[torch.isnan(self.scales)]):
                 raise NanException('scales vector goes into Nan. Stop training.')
             # end if
@@ -375,7 +391,8 @@ class ModelTrainerTorchBackend(TrainerBase):
               auto_stop_epochs: int = 10,
               auto_stop_threshold: float = 0.00001,
               is_shuffle: bool = False,
-              is_validation_all: bool = False) -> TrainedMmdParameters:
+              is_validation_all: bool = False,
+              is_gc: bool = False) -> TrainedMmdParameters:
         """Training (Optimization) of MMD parameters.
 
         Args:
@@ -398,6 +415,8 @@ class ModelTrainerTorchBackend(TrainerBase):
             if False, selected sequentially.
             is_validation_all: True, if you'd like to run validations with batch=1.
             False, then val. values will be averaged with the same batch-size of a training.
+            is_gc: True if you release memory after each batch, False no.
+            Normally, the speed will be slower if is_gc=True. You use the option when memory leaks during trainings.
         Returns:
             TrainedMmdParameters
         """
@@ -413,7 +432,8 @@ class ModelTrainerTorchBackend(TrainerBase):
         params_target = [self.scales] + list(kernel_params_target.values())
         optimizer = torch.optim.SGD(params_target, lr=lr, momentum=0.9, nesterov=True)
 
-        self.run_validation(dataset_validation, reg, batchsize, num_workers, is_shuffle, is_validation_all)
+        self.run_validation(dataset_validation, reg, batchsize, num_workers, is_shuffle, is_validation_all,
+                            is_first_iter=True, is_gc=is_gc)
         # procedure of trainings
         training_log = []
         for epoch in range(1, num_epochs + 1):
@@ -424,13 +444,15 @@ class ModelTrainerTorchBackend(TrainerBase):
                                                      reg=reg,
                                                      num_workers=num_workers,
                                                      is_scales_non_negative=is_scales_non_negative,
-                                                     is_shuffle=is_shuffle)
+                                                     is_shuffle=is_shuffle,
+                                                     is_gc=is_gc)
             val_mmd2_pq, val_obj, val_stat = self.run_validation(dataset_validation=dataset_validation,
                                                                  reg=reg,
                                                                  batchsize=batchsize,
                                                                  num_workers=num_workers,
                                                                  is_shuffle=is_shuffle,
-                                                                 is_validation_all=is_validation_all)
+                                                                 is_validation_all=is_validation_all,
+                                                                 is_gc=is_gc)
             training_log.append(TrainingLog(epoch=epoch,
                                             avg_mmd_training=avg_mmd2.detach().cpu().numpy(),
                                             avg_obj_train=avg_obj.detach().cpu().numpy(),
