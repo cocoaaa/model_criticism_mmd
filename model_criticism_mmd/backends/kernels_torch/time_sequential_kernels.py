@@ -51,8 +51,6 @@ def func_compute_kernel_matrix_generic(x: torch.Tensor,
     return mat
 
 
-
-
 class SoftDtwKernelFunctionTimeSample(BasicRBFKernelFunction):
     """A Kernel class when your data is temporal data.
 
@@ -113,17 +111,3 @@ class SoftDtwKernelFunctionTimeSample(BasicRBFKernelFunction):
         else:
             return {'gamma': self.gamma, 'log_sigma': self.log_sigma, 'normalize': self.normalize}
 
-
-# class SoftDtwKernelFunctionTimeFeature(BasicRBFKernelFunction):
-#     """A Kernel class when your data is temporal data.
-#     Your data is matrix form, of which  each feature represents t=i.
-#
-#     In a column-direction, values show data "sample"..
-#     In a row-direction, values show data "feature" of t=i.
-#
-#     In this class, distance-metric is score by SoftDTW algorithm.
-#
-#     The kernel is RBFKernel, thus the Eq of the class is
-#     RbfKernel(x, y) = exp(-1 * (softDTW(x, y)) / sigma)
-#     """
-#     pass

@@ -135,8 +135,7 @@ class TwoSampleIterDataSet(torch.utils.data.IterableDataset):
 
     @classmethod
     def from_disk(cls) -> "TwoSampleIterDataSet":
-        # todo
-        pass
+        raise Exception()
 
     def get_dimension_x(self) -> int:
         return self.x[-1]
@@ -161,8 +160,11 @@ class TwoSampleIterDataSet(torch.utils.data.IterableDataset):
         # end if
 
         if index >= self.length_x:
-            empty_array = np.empty(self.y[index].shape)
-            empty_array[:] = self.value_padding
+            try:
+                empty_array = np.empty(self.y[index].shape)
+                empty_array[:] = self.value_padding
+            except IndexError:
+                print()
             return torch.tensor(empty_array), self.y[index]
         elif index >= self.length_y:
             empty_array = np.empty(self.x[index].shape)
@@ -174,8 +176,8 @@ class TwoSampleIterDataSet(torch.utils.data.IterableDataset):
             return self.x[index], self.y[index]
 
     def __iter__(self):
-        # todo adjustment of x and y
-        for i in range(0, self.length_x):
+        """called from DatasetLoader class."""
+        for i in range(0, max([self.length_x, self.length_y])):
             yield self.__getitem__(i)
             i += 1
         return
