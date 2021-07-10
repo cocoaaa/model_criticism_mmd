@@ -6,7 +6,7 @@ from model_criticism_mmd.logger_unit import logger
 from model_criticism_mmd.backends.kernels_torch.base import KernelMatrixObject
 from model_criticism_mmd.backends.kernels_torch.rbf_kernel import BasicRBFKernelFunction
 from model_criticism_mmd.supports.metrics.soft_dtw import SoftDTW
-from tslearn.metrics import soft_dtw
+
 
 FloatOrTensor = Union[float, torch.Tensor]
 device_default = torch.device('cpu')
@@ -59,8 +59,9 @@ class SoftDtwKernelFunctionTimeSample(BasicRBFKernelFunction):
     """
     def __init__(self,
                  gamma: float = 1.0,
-                 log_sigma: Union[float, torch.Tensor] = 1,
+                 log_sigma: Union[float, torch.Tensor] = 1.0,
                  post_normalize: bool = True,
+                 max_value_post_normalization: int = 1000,
                  device_obj: torch.device = device_default,
                  opt_sigma: bool = False,
                  possible_shapes=(2,)):
@@ -69,7 +70,8 @@ class SoftDtwKernelFunctionTimeSample(BasicRBFKernelFunction):
         Args:
             gamma: a parameter of SoftDTW
             log_sigma: a sigma of RBF kernel
-            post_normalize: normalization of SoftDTW. A Distance matrix of SoftDTW is normalized into (0, 1).
+            post_normalize: normalization of SoftDTW. A Distance matrix of SoftDTW is normalized into (0, max_value_post_normalization).
+            max_value_post_normalization: only when post_normalize = True
             device_obj: device object of torch.
             opt_sigma: True or False.
         """
@@ -77,20 +79,31 @@ class SoftDtwKernelFunctionTimeSample(BasicRBFKernelFunction):
         self.post_normalize = post_normalize
         self.log_sigma = torch.tensor([log_sigma]) if isinstance(log_sigma, float) else log_sigma
         self.opt_sigma = opt_sigma
-        super().__init__(device_obj=device_obj, possible_shapes=possible_shapes, log_sigma=log_sigma)
+        self.max_value_post_normalization = max_value_post_normalization
+        super().__init__(device_obj=device_obj,
+                         possible_shapes=possible_shapes, log_sigma=log_sigma,
+                         opt_sigma=opt_sigma)
         self.soft_dtw_generator = SoftDTW(use_cuda=True if device_obj.type == 'cuda' else False,
                                           gamma=gamma, normalize=False)
 
     @staticmethod
-    def post_normalization(d_xx: torch.Tensor,
+    def __post_normalization(d_matrix: torch.Tensor, max_value: int):
+        # moving into 0
+        min_zero_d = d_matrix + (0 - torch.min(d_matrix))
+        # assert torch.min(min_zero_d).detach().numpy().tolist() == 0.0
+        denominator_ = max_value / torch.max(min_zero_d)
+        post_d__ = min_zero_d * denominator_
+        # assert abs(torch.max(post_d__).detach().numpy().tolist() - max_value) < 0.1, \
+        #     f'{torch.max(post_d__).detach().numpy().tolist()} == {max_value}'
+        return post_d__
+
+    def post_normalization(self,
+                           d_xx: torch.Tensor,
                            d_yy: torch.Tensor,
                            d_xy: torch.Tensor) -> typing.Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        d_xx__ = (d_xx - torch.min(d_xx)) / (torch.max(d_xx) - torch.min(d_xx))
-        d_yy__ = (d_yy - torch.min(d_yy)) / (torch.max(d_yy) - torch.min(d_yy))
-        d_xy__ = (d_xy - torch.min(d_xy)) / (torch.max(d_xy) - torch.min(d_xy))
-        assert torch.max(d_xx__).detach().numpy().tolist() == 1.0
-        assert torch.max(d_yy__).detach().numpy().tolist() == 1.0
-        assert torch.max(d_xy__).detach().numpy().tolist() == 1.0
+        d_xx__ = self.__post_normalization(d_xx, self.max_value_post_normalization)
+        d_yy__ = self.__post_normalization(d_yy, self.max_value_post_normalization)
+        d_xy__ = self.__post_normalization(d_xy, self.max_value_post_normalization)
         return d_xx__, d_yy__, d_xy__
 
     def compute_kernel_matrix(self, x: torch.Tensor, y: torch.Tensor, **kwargs) -> KernelMatrixObject:
@@ -120,13 +133,15 @@ class SoftDtwKernelFunctionTimeSample(BasicRBFKernelFunction):
         k_xx = torch.exp(-1 * gamma * torch.pow(d_xx_, 2))
         k_yy = torch.exp(-1 * gamma * torch.pow(d_yy_, 2))
         k_xy = torch.exp(-1 * gamma * torch.pow(d_xy_, 2))
-        print(k_xx, k_yy, k_xy)
-
+        if torch.all(k_xy == 0):
+            logger.warning('k_xy matrix has all 0 value. Check training condition.')
+        # end if
         return KernelMatrixObject(k_xx, k_yy, k_xy)
 
     def get_params(self, is_grad_param_only: bool = False) -> typing.Dict[str, torch.Tensor]:
         if is_grad_param_only:
             return {'log_sigma': self.log_sigma}
         else:
-            return {'gamma': self.gamma, 'log_sigma': self.log_sigma, 'post_normalize': self.post_normalize}
-
+            return {'gamma': self.gamma, 'log_sigma': self.log_sigma,
+                    'post_normalize': self.post_normalize,
+                    'max_value_post_normalization': self.max_value_post_normalization}

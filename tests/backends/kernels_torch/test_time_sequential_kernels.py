@@ -39,13 +39,16 @@ def test_soft_dtw_single_diff_length_sample():
 def test_soft_dtw_unit_time_sample():
     x_sample, y_sample, x_time_length, y_time_length = 5, 5, 150, 300
     # input is (n-sample, n-time-series, n-features)
-    x_train = torch.normal(100, 0.9, (x_sample, x_time_length))
+    x_train = torch.normal(150, 5, (x_sample, x_time_length))
     y_train = torch.normal(150, 0.5, (y_sample, y_time_length))
 
-    x_val = torch.rand((10, x_time_length))
-    y_val = torch.rand((15, y_time_length))
+    x_val = torch.normal(150, 50, (10, x_time_length))
+    y_val = torch.normal(150, 0.5, (15, y_time_length))
     device_obj = torch.device('cpu')
-    kernel_function = kernels_torch.SoftDtwKernelFunctionTimeSample(gamma=0.1)
+    kernel_function = kernels_torch.SoftDtwKernelFunctionTimeSample(gamma=0.5,
+                                                                    post_normalize=True,
+                                                                    opt_sigma=False,
+                                                                    max_value_post_normalization=1000)
     trainer = ModelTrainerTorchBackend(MMD(kernel_function_obj=kernel_function, device_obj=device_obj),
                                            device_obj=device_obj)
     dataset_train = TwoSampleIterDataSet(x=x_train, y=y_train, device_obj=device_obj)
@@ -55,7 +58,7 @@ def test_soft_dtw_unit_time_sample():
                                 num_epochs=50,
                                 batchsize=30,
                                 initial_scale=None,
-                                is_gc=True)
+                                is_gc=False)
     trainer.mmd_distance(x_val, y_val, is_detach=True)
 
 
