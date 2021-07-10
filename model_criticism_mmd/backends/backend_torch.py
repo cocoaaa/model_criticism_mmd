@@ -228,6 +228,12 @@ class ModelTrainerTorchBackend(TrainerBase):
                        ) -> typing.Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """A procedure for validations
         """
+        if (dataset_validation.length_x < batchsize) and ((dataset_validation.length_y < batchsize)):
+            logger.debug(f'in validation step, is_validation_all is True. '
+                         f'N(x)={dataset_validation.length_x},N(y)={dataset_validation.length_y} < batchsize')
+            is_validation_all = True
+        # end if
+
         if is_validation_all:
             x_val, y_val = dataset_validation.get_all_item()
             val_mmd2_pq, val_stat, val_obj = self.forward(x_val, y_val, reg=reg, is_validation=True)

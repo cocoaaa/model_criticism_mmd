@@ -147,7 +147,13 @@ class TwoSampleIterDataSet(torch.utils.data.IterableDataset):
         return self.size_dimension, self.size_dimension_short
 
     def get_all_item(self) -> typing.Tuple[torch.Tensor, torch.Tensor]:
-        return self.x, self.y
+        if not hasattr(self, 'x'):
+            self.x = self.load_hdf5(self.path_h5)['x']
+        # end if
+        if not hasattr(self, 'y'):
+            self.y = self.load_hdf5(self.path_h5)['y']
+        # end if
+        return torch.from_numpy(self.x[:]), torch.from_numpy(self.y[:])
 
     def __getitem__(self, index: int):
         # for management of __getitem__, we open the file here.

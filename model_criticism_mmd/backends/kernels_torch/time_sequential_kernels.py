@@ -59,8 +59,8 @@ class SoftDtwKernelFunctionTimeSample(BasicRBFKernelFunction):
     """
     def __init__(self,
                  gamma: float = 1.0,
-                 log_sigma: Union[float, torch.Tensor] = 100,
-                 normalize: bool = False,
+                 log_sigma: Union[float, torch.Tensor] = 1,
+                 post_normalize: bool = True,
                  device_obj: torch.device = device_default,
                  opt_sigma: bool = False,
                  possible_shapes=(2,)):
@@ -69,17 +69,29 @@ class SoftDtwKernelFunctionTimeSample(BasicRBFKernelFunction):
         Args:
             gamma: a parameter of SoftDTW
             log_sigma: a sigma of RBF kernel
-            normalize: normalization of SoftDTW. normalization is valid only when x, y have the same number of samples.
+            post_normalize: normalization of SoftDTW. A Distance matrix of SoftDTW is normalized into (0, 1).
             device_obj: device object of torch.
             opt_sigma: True or False.
         """
         self.gamma = gamma
-        self.normalize = normalize
+        self.post_normalize = post_normalize
         self.log_sigma = torch.tensor([log_sigma]) if isinstance(log_sigma, float) else log_sigma
         self.opt_sigma = opt_sigma
         super().__init__(device_obj=device_obj, possible_shapes=possible_shapes, log_sigma=log_sigma)
         self.soft_dtw_generator = SoftDTW(use_cuda=True if device_obj.type == 'cuda' else False,
-                                          gamma=gamma, normalize=normalize)
+                                          gamma=gamma, normalize=False)
+
+    @staticmethod
+    def post_normalization(d_xx: torch.Tensor,
+                           d_yy: torch.Tensor,
+                           d_xy: torch.Tensor) -> typing.Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        d_xx__ = (d_xx - torch.min(d_xx)) / (torch.max(d_xx) - torch.min(d_xx))
+        d_yy__ = (d_yy - torch.min(d_yy)) / (torch.max(d_yy) - torch.min(d_yy))
+        d_xy__ = (d_xy - torch.min(d_xy)) / (torch.max(d_xy) - torch.min(d_xy))
+        assert torch.max(d_xx__).detach().numpy().tolist() == 1.0
+        assert torch.max(d_yy__).detach().numpy().tolist() == 1.0
+        assert torch.max(d_xy__).detach().numpy().tolist() == 1.0
+        return d_xx__, d_yy__, d_xy__
 
     def compute_kernel_matrix(self, x: torch.Tensor, y: torch.Tensor, **kwargs) -> KernelMatrixObject:
         assert isinstance(x, torch.Tensor)
@@ -90,18 +102,25 @@ class SoftDtwKernelFunctionTimeSample(BasicRBFKernelFunction):
         else:
             log_sigma = kwargs['log_sigma']
         # end if
+        x__, y__ = self.delete_padding_xy(x, y, target_dim=1)
 
-        d_xx = func_compute_kernel_matrix_square(x, x, soft_dtw_generator=self.soft_dtw_generator)
-        d_yy = func_compute_kernel_matrix_square(y, y, soft_dtw_generator=self.soft_dtw_generator)
+        d_xx = func_compute_kernel_matrix_square(x__, x__, soft_dtw_generator=self.soft_dtw_generator)
+        d_yy = func_compute_kernel_matrix_square(y__, y__, soft_dtw_generator=self.soft_dtw_generator)
         if x.shape[0] == y.shape[0]:
-            d_xy = func_compute_kernel_matrix_square(x, y, soft_dtw_generator=self.soft_dtw_generator)
+            d_xy = func_compute_kernel_matrix_square(x__, y__, soft_dtw_generator=self.soft_dtw_generator)
         else:
-            d_xy = func_compute_kernel_matrix_generic(x, y, soft_dtw_generator=self.soft_dtw_generator)
+            d_xy = func_compute_kernel_matrix_generic(x__, y__, soft_dtw_generator=self.soft_dtw_generator)
+        # end if
+        if self.post_normalize:
+            d_xx_, d_yy_, d_xy_ = self.post_normalization(d_xx, d_yy, d_xy)
+        else:
+            d_xx_, d_yy_, d_xy_ = d_xx, d_yy, d_xy
         # end if
         gamma = torch.div(1, (2 * torch.pow(log_sigma, 2)))
-        k_xx = torch.exp(-1 * gamma * torch.pow(d_xx, 2))
-        k_yy = torch.exp(-1 * gamma * torch.pow(d_yy, 2))
-        k_xy = torch.exp(-1 * gamma * torch.pow(d_xy, 2))
+        k_xx = torch.exp(-1 * gamma * torch.pow(d_xx_, 2))
+        k_yy = torch.exp(-1 * gamma * torch.pow(d_yy_, 2))
+        k_xy = torch.exp(-1 * gamma * torch.pow(d_xy_, 2))
+        print(k_xx, k_yy, k_xy)
 
         return KernelMatrixObject(k_xx, k_yy, k_xy)
 
@@ -109,5 +128,5 @@ class SoftDtwKernelFunctionTimeSample(BasicRBFKernelFunction):
         if is_grad_param_only:
             return {'log_sigma': self.log_sigma}
         else:
-            return {'gamma': self.gamma, 'log_sigma': self.log_sigma, 'normalize': self.normalize}
+            return {'gamma': self.gamma, 'log_sigma': self.log_sigma, 'post_normalize': self.post_normalize}
 

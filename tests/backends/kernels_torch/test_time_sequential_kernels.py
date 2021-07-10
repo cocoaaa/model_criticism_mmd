@@ -6,7 +6,7 @@ import numpy as np
 import torch
 
 
-def test_soft_dtw_single(resource_path_root):
+def test_soft_dtw_single():
     # x_sample, y_sample is for example observation-points.
     x_sample, y_sample, x_time_length, y_time_length = 10, 10, 250, 300
     # input is (n-sample, n-time-series, n-features)
@@ -21,7 +21,22 @@ def test_soft_dtw_single(resource_path_root):
     assert len(grads[grads > 0.0]) > 0
 
 
-def test_soft_dtw_unit_time_sample(resource_path_root):
+def test_soft_dtw_single_diff_length_sample():
+    # x_sample, y_sample is for example observation-points.
+    x_sample, y_sample, x_time_length, y_time_length = 10, 20, 250, 300
+    # input is (n-sample, n-time-series, n-features)
+    x_train = torch.normal(15, 0.9, (x_sample, x_time_length), requires_grad=True)
+    y_train = torch.normal(10, 0.5, (y_sample, y_time_length))
+
+    kernel_obj = kernels_torch.SoftDtwKernelFunctionTimeSample()
+    k_matrix_obj = kernel_obj.compute_kernel_matrix(x_train, y_train)
+    grad_outputs = torch.ones_like(k_matrix_obj.k_xx)
+    grads = torch.autograd.grad(k_matrix_obj.k_xx, x_train, grad_outputs=grad_outputs)[0]
+    # check if grad exists
+    assert len(grads[grads > 0.0]) > 0
+
+
+def test_soft_dtw_unit_time_sample():
     x_sample, y_sample, x_time_length, y_time_length = 5, 5, 150, 300
     # input is (n-sample, n-time-series, n-features)
     x_train = torch.normal(100, 0.9, (x_sample, x_time_length))
@@ -45,6 +60,7 @@ def test_soft_dtw_unit_time_sample(resource_path_root):
 
 
 if __name__ == '__main__':
-    # test_soft_dtw_single(Path('../../resources'))
-    test_soft_dtw_unit_time_sample(Path('../../resources'))
+    #test_soft_dtw_single()
+    #test_soft_dtw_single_diff_length_sample()
+    test_soft_dtw_unit_time_sample()
 
