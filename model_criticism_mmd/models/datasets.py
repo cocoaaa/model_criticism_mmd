@@ -160,11 +160,8 @@ class TwoSampleIterDataSet(torch.utils.data.IterableDataset):
         # end if
 
         if index >= self.length_x:
-            try:
-                empty_array = np.empty(self.y[index].shape)
-                empty_array[:] = self.value_padding
-            except IndexError:
-                print()
+            empty_array = np.empty(self.y[index].shape)
+            empty_array[:] = self.value_padding
             return torch.tensor(empty_array), self.y[index]
         elif index >= self.length_y:
             empty_array = np.empty(self.x[index].shape)
