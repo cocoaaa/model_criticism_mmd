@@ -32,10 +32,10 @@ class SoftDTW(torch.nn.Module):
         else:
             self.dist_func = SoftDTW._euclidean_dist_func
 
-    def __del__(self):
-        del self.D_xy
-        print('gc D_xy...')
-        gc.collect()
+    # def __del__(self):
+    #     del self.D_xy
+    #     # print('gc D_xy...')
+    #     gc.collect()
 
     def _get_func_dtw(self, x, y):
         """

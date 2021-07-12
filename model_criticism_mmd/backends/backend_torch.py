@@ -9,6 +9,7 @@ from model_criticism_mmd.models import TrainingLog, TrainedMmdParameters, Traine
     TwoSampleDataSet
 from model_criticism_mmd.backends import kernels_torch
 from model_criticism_mmd.exceptions import NanException
+import gc
 
 device_default = torch.device('cpu')
 
@@ -130,8 +131,24 @@ class MMD(object):
     def operation_scale_product(scales: torch.Tensor,
                                 input_p: torch.Tensor,
                                 input_q: torch.Tensor) -> typing.Tuple[torch.Tensor, torch.Tensor]:
-        rep_p = torch.mul(scales, input_p)
-        rep_q = torch.mul(scales, input_q)
+        """Element-wise product. scales(1d tensor) * input_{p, q}(2d tensor)
+        Note: if input_{p, q} have different dimensions, we cut scales into the same size as input dimensions.
+
+        Args:
+            scales: 1d tensor
+            input_p: 2d tensor
+            input_q: 2d tensor
+
+        Returns: (2d tensor, 2d tensor)
+        """
+        if input_p.shape[-1] != input_q.shape[-1]:
+            scales_p = scales[0:input_p.shape[-1]]
+            scales_q = scales[0:input_q.shape[-1]]
+            rep_p = torch.mul(scales_p, input_p)
+            rep_q = torch.mul(scales_q, input_q)
+        else:
+            rep_p = torch.mul(scales, input_p)
+            rep_q = torch.mul(scales, input_q)
 
         return rep_p, rep_q
 
@@ -149,9 +166,6 @@ class MMD(object):
         self.kernel_function_obj.check_data_shape(y)
 
         if self.scales is not None:
-            assert len(self.scales) == x.shape[-1] == y.shape[-1],\
-            f'Error at scales vector. Dimension size does not match. ' \
-            f'The given scales {len(self.scales)}dims. x {x.shape[-1]}dims. y {y.shape[-1]}dims.'
             __x = torch.tensor(x) if isinstance(x, numpy.ndarray) else x
             __y = torch.tensor(y) if isinstance(x, numpy.ndarray) else y
             rep_x, rep_y = self.operation_scale_product(self.scales, __x, __y)
@@ -188,7 +202,9 @@ class ModelTrainerTorchBackend(TrainerBase):
                                           device_obj=device_obj), device_obj=device_obj)
         return model_obj
 
-    def init_scales(self, size_dimension: int, init_scale: torch.Tensor) -> torch.Tensor:
+    def init_scales(self,
+                    size_dimension: int,
+                    init_scale: torch.Tensor) -> torch.Tensor:
         """A scale vector which scales the input matrix X.
         must be the same size as the input data."""
 
@@ -200,6 +216,73 @@ class ModelTrainerTorchBackend(TrainerBase):
         # end if
         return scales
 
+    def run_validation(self,
+                       dataset_validation: TwoSampleDataSet,
+                       reg: torch.Tensor,
+                       batchsize: int,
+                       num_workers: int,
+                       is_shuffle: bool = False,
+                       is_validation_all: bool = False,
+                       is_first_iter: bool = False,
+                       is_gc: bool = False
+                       ) -> typing.Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """A procedure for validations
+        """
+        if (dataset_validation.length_x < batchsize) and ((dataset_validation.length_y < batchsize)):
+            logger.debug(f'in validation step, is_validation_all is True. '
+                         f'N(x)={dataset_validation.length_x},N(y)={dataset_validation.length_y} < batchsize')
+            is_validation_all = True
+        # end if
+
+        if is_validation_all:
+            x_val, y_val = dataset_validation.get_all_item()
+            val_mmd2_pq, val_stat, val_obj = self.forward(x_val, y_val, reg=reg, is_validation=True)
+            if is_first_iter:
+                logger.info(
+                    f'Validation at 0. MMD^2 = {val_mmd2_pq.detach().cpu().numpy()}, '
+                    f'ratio = {val_stat.detach().cpu().numpy()} '
+                    f'obj = {val_obj.detach().cpu().numpy()}')
+            return val_mmd2_pq, val_obj, val_stat
+        else:
+            total_mmd2_val = 0
+            total_obj_val = 0
+            total_stat_val = 0
+            n_batches = 0
+            if self.device_obj == torch.device('cpu'):
+                data_loader = torch.utils.data.DataLoader(dataset_validation,
+                                                          batch_size=batchsize, shuffle=is_shuffle,
+                                                          num_workers=num_workers)
+            else:
+                data_loader = torch.utils.data.DataLoader(dataset_validation,
+                                                          batch_size=batchsize, shuffle=is_shuffle)
+            # end if
+            for xbatch, ybatch in data_loader:
+                mmd2_pq, stat, obj = self.forward(xbatch, ybatch, reg=reg)
+                # end if
+                assert np.isfinite(mmd2_pq.detach().cpu().numpy())
+                assert np.isfinite(obj.detach().cpu().numpy())
+                total_mmd2_val += mmd2_pq
+                total_obj_val += obj
+                total_stat_val += stat
+                n_batches += 1
+                if is_gc:
+                    del mmd2_pq, obj, stat
+                    del xbatch, ybatch
+                    gc.collect()
+                # end if
+            # end for
+            avg_mmd2 = torch.div(total_mmd2_val, n_batches)
+            avg_obj = torch.div(total_obj_val, n_batches)
+            avg_stat = torch.div(total_stat_val, n_batches)
+
+            if is_first_iter:
+                logger.info(
+                    f'Validation(mean over batch) at 0. '
+                    f'MMD^2 = {avg_mmd2.detach().cpu().numpy()}, '
+                    f'ratio = {avg_stat.detach().cpu().numpy()} '
+                    f'obj = {avg_obj.detach().cpu().numpy()}')
+            return avg_mmd2, avg_obj, avg_stat
+
     def run_train_epoch(self,
                         optimizer: torch.optim.SGD,
                         dataset: TwoSampleDataSet,
@@ -208,6 +291,7 @@ class ModelTrainerTorchBackend(TrainerBase):
                         num_workers: int = 1,
                         is_scales_non_negative: bool = False,
                         is_shuffle: bool = False,
+                        is_gc: bool = False
                         ) -> typing.Tuple[torch.Tensor, torch.Tensor]:
         total_mmd2 = 0
         total_obj = 0
@@ -232,6 +316,11 @@ class ModelTrainerTorchBackend(TrainerBase):
             obj.backward()
             #
             optimizer.step()
+            if is_gc:
+                del mmd2_pq, obj, stat
+                del xbatch, ybatch
+                gc.collect()
+            # end if
             if len(self.scales[torch.isnan(self.scales)]):
                 raise NanException('scales vector goes into Nan. Stop training.')
             # end if
@@ -307,7 +396,9 @@ class ModelTrainerTorchBackend(TrainerBase):
               is_training_auto_stop: bool = False,
               auto_stop_epochs: int = 10,
               auto_stop_threshold: float = 0.00001,
-              is_shuffle: bool = False) -> TrainedMmdParameters:
+              is_shuffle: bool = False,
+              is_validation_all: bool = False,
+              is_gc: bool = False) -> TrainedMmdParameters:
         """Training (Optimization) of MMD parameters.
 
         Args:
@@ -328,27 +419,28 @@ class ModelTrainerTorchBackend(TrainerBase):
             auto_stop_threshold: The threshold to stop trainings automatically.
             is_shuffle: Dataset will be selected randomly or NOT. if True, then sample is selected randomly.
             if False, selected sequentially.
+            is_validation_all: True, if you'd like to run validations with batch=1.
+            False, then val. values will be averaged with the same batch-size of a training.
+            is_gc: True if you release memory after each batch, False no.
+            Normally, the speed will be slower if is_gc=True. You use the option when memory leaks during trainings.
         Returns:
             TrainedMmdParameters
         """
         assert num_epochs > 0
         assert dataset_training.get_dimension() == dataset_validation.get_dimension()
 
-        self.scales = self.init_scales(size_dimension=dataset_training.get_dimension(), init_scale=initial_scale)
+        dimension_longer: int = dataset_training.get_dimension()[0]
+        self.scales = self.init_scales(size_dimension=dimension_longer, init_scale=initial_scale)
         self.mmd_estimator.scales = self.scales
 
         # collects parameters to be optimized / set an optimizer
         kernel_params_target = self.mmd_estimator.kernel_function_obj.get_params(is_grad_param_only=True)
         params_target = [self.scales] + list(kernel_params_target.values())
         optimizer = torch.optim.SGD(params_target, lr=lr, momentum=0.9, nesterov=True)
-        # procedure of trainings
-        x_val, y_val = dataset_validation.get_all_item()
-        val_mmd2_pq, val_stat, val_obj = self.forward(x_val, y_val, reg=reg, is_validation=True)
-        logger.debug(
-            f'Validation at 0. MMD^2 = {val_mmd2_pq.detach().cpu().numpy()}, '
-            f'ratio = {val_stat.detach().cpu().numpy()} '
-            f'obj = {val_obj.detach().cpu().numpy()}')
 
+        self.run_validation(dataset_validation, reg, batchsize, num_workers, is_shuffle, is_validation_all,
+                            is_first_iter=True, is_gc=is_gc)
+        # procedure of trainings
         training_log = []
         for epoch in range(1, num_epochs + 1):
             optimizer.zero_grad()
@@ -358,13 +450,20 @@ class ModelTrainerTorchBackend(TrainerBase):
                                                      reg=reg,
                                                      num_workers=num_workers,
                                                      is_scales_non_negative=is_scales_non_negative,
-                                                     is_shuffle=is_shuffle)
-            val_mmd2_pq, val_stat, val_obj = self.forward(x_val, y_val, reg=reg, is_validation=True)
-            training_log.append(TrainingLog(epoch,
-                                            avg_mmd2.detach().cpu().numpy(),
-                                            avg_obj.detach().cpu().numpy(),
-                                            val_mmd2_pq.detach().cpu().numpy(),
-                                            val_obj.detach().cpu().numpy(),
+                                                     is_shuffle=is_shuffle,
+                                                     is_gc=is_gc)
+            val_mmd2_pq, val_obj, val_stat = self.run_validation(dataset_validation=dataset_validation,
+                                                                 reg=reg,
+                                                                 batchsize=batchsize,
+                                                                 num_workers=num_workers,
+                                                                 is_shuffle=is_shuffle,
+                                                                 is_validation_all=is_validation_all,
+                                                                 is_gc=is_gc)
+            training_log.append(TrainingLog(epoch=epoch,
+                                            avg_mmd_training=avg_mmd2.detach().cpu().numpy(),
+                                            avg_obj_train=avg_obj.detach().cpu().numpy(),
+                                            mmd_validation=val_mmd2_pq.detach().cpu().numpy(),
+                                            obj_validation=val_obj.detach().cpu().numpy(),
                                             sigma=None,
                                             scales=self.scales.detach().cpu().numpy()))
             self.log_message(epoch, avg_mmd2, avg_obj, val_mmd2_pq, val_stat, val_obj)
