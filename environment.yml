@@ -147,7 +147,7 @@ dependencies:
   - pip:
     - colorama==0.4.4
     - dataclasses==0.8
-    - lasagne==0.2.dev1
+    - lasagne==https://github.com/Theano/Theano/archive/master.zip
     - nptyping==1.4.1
     - pytest-resource-path==1.3.0
     - typish==1.9.2
