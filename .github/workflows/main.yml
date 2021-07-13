@@ -18,11 +18,16 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Initializing conda
         run: |
-          $CONDA/bin/conda env update --file environment.yml --name base
+          $CONDA/bin/conda create -n test_env python=3.6
+      - name: starting new env
+        run: |
+          $CONDA/bin/conda activate test_env && python -V
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           $CONDA/bin/conda install flake8 pytest poetry pytest-resource-path nbmake pytest-parallel
+          $CONDA/bin/conda install -c conda-forge theano shogun
+          $CONDA/bin/conda install -c toli lasagne
       - name: Install dependencies
         run: |
           make full
