@@ -21,7 +21,7 @@ jobs:
           $CONDA/bin/conda create -n test_env python=3.6
       - name: starting new env
         run: |
-          $CONDA/bin/conda activate test_env && python -V
+          $CONDA/bin/conda init bash && $CONDA/bin/conda activate test_env && python -V
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
