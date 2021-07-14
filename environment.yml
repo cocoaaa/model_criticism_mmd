@@ -3,7 +3,9 @@ channels:
   - pytorch
   - conda-forge
   - defaults
+  - toli
 dependencies:
+  - lasagne=0.2.dev1.toli
   - _libgcc_mutex=0.1=main
   - appdirs=1.4.4=py_0
   - arpack=3.5.0=blas_openblas_202
@@ -147,7 +149,6 @@ dependencies:
   - pip:
     - colorama==0.4.4
     - dataclasses==0.8
-    - lasagne==0.2.dev1
     - nptyping==1.4.1
     - pytest-resource-path==1.3.0
     - typish==1.9.2

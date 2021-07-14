@@ -110,6 +110,10 @@ class MMD(object):
             __min_var_est = min_var_est
         # end if
         mmd2, var_est = self._mmd2_and_variance(k_xx, k_xy, k_yy, unit_diagonal=unit_diagonal)
+        if mmd2.detach().numpy().tolist() < 0.0:
+            logger.warning(f'Be careful. MMD2 is minus value, which is against the principle. '
+                           f'MMD2 is automatically set into 0.0. Your current MMD2 = {mmd2}')
+        # end if
         ratio = torch.div(mmd2, torch.sqrt(torch.max(var_est, __min_var_est)))
         return mmd2, ratio
 
@@ -174,6 +178,20 @@ class MMD(object):
             __y = torch.tensor(y) if isinstance(x, numpy.ndarray) else y
             rep_x, rep_y = __x, __y
         # end if
+
+        if hasattr(self.kernel_function_obj, 'log_sigma') and self.kernel_function_obj.log_sigma.item() == -1.0:
+            # if block for special case. When a kernel has log_sigma parameter and log_sigma is not given by an user.
+            assert hasattr(self.kernel_function_obj, 'get_median') and \
+                   callable(getattr(self.kernel_function_obj, 'get_median'))
+
+            log_sigma_estimated: float = self.kernel_function_obj.get_median(rep_x, rep_y)
+            if hasattr(self.kernel_function_obj, 'opt_sigma') and self.kernel_function_obj.opt_sigma is True:
+                self.kernel_function_obj.log_sigma = torch.tensor(log_sigma_estimated, device=self.device_obj,
+                                                                  requires_grad=True)
+            else:
+                self.kernel_function_obj.log_sigma = torch.tensor(log_sigma_estimated, device=self.device_obj)
+        # end if
+
         mmd2, ratio = self.process_mmd2_and_ratio(rep_x, rep_y, **kwargs)
         if is_detach:
             return MmdValues(mmd2.cpu().detach(), ratio.cpu().detach())
@@ -438,8 +456,13 @@ class ModelTrainerTorchBackend(TrainerBase):
         params_target = [self.scales] + list(kernel_params_target.values())
         optimizer = torch.optim.SGD(params_target, lr=lr, momentum=0.9, nesterov=True)
 
-        self.run_validation(dataset_validation, reg, batchsize, num_workers, is_shuffle, is_validation_all,
-                            is_first_iter=True, is_gc=is_gc)
+        avg_mmd2, avg_obj, avg_stat = self.run_validation(dataset_validation, reg, batchsize, num_workers, is_shuffle, is_validation_all,
+                                                          is_first_iter=True, is_gc=is_gc)
+        if avg_mmd2.detach().numpy().tolist() < 0.0:
+            raise Exception(f'MMD2 is minus value, which is against the principle. '
+                            f'Stop training. Your MMD2 on validation is {avg_mmd2}')
+        # end if
+
         # procedure of trainings
         training_log = []
         for epoch in range(1, num_epochs + 1):

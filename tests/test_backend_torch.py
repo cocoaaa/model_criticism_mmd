@@ -7,10 +7,8 @@ from pathlib import Path
 
 from model_criticism_mmd.backends.backend_torch import ModelTrainerTorchBackend, MMD
 from model_criticism_mmd.logger_unit import logger
-from model_criticism_mmd.backends.kernels_torch import BasicRBFKernelFunction, MaternKernelFunction, \
-    SoftDtwKernelFunctionTimeSample
+from model_criticism_mmd.backends.kernels_torch import BasicRBFKernelFunction, MaternKernelFunction
 from model_criticism_mmd.models import TwoSampleDataSet
-from model_criticism_mmd.supports.split_data_torch import split_data
 
 import torch
 
@@ -119,7 +117,7 @@ def test_devel(resource_path_root: Path):
     dataset_train = TwoSampleDataSet(x_train, y_train, device_obj)
     dataset_val = TwoSampleDataSet(x_test, y_test, torch.device('cpu'))
     for kernel_function in [
-        BasicRBFKernelFunction(log_sigma=0.0, device_obj=device_obj, opt_sigma=True),
+        BasicRBFKernelFunction(device_obj=device_obj, opt_sigma=True),
         MaternKernelFunction(nu=0.5, device_obj=device_obj),
     ]:
         trainer = ModelTrainerTorchBackend(MMD(kernel_function_obj=kernel_function, device_obj=device_obj),
