@@ -110,6 +110,10 @@ class MMD(object):
             __min_var_est = min_var_est
         # end if
         mmd2, var_est = self._mmd2_and_variance(k_xx, k_xy, k_yy, unit_diagonal=unit_diagonal)
+        if mmd2.detach().numpy().tolist() < 0.0:
+            logger.warning(f'Be careful. MMD2 is minus value, which is against the principle. '
+                           f'MMD2 is automatically set into 0.0. Your current MMD2 = {mmd2}')
+        # end if
         ratio = torch.div(mmd2, torch.sqrt(torch.max(var_est, __min_var_est)))
         return mmd2, ratio
 
