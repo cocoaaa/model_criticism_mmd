@@ -178,6 +178,20 @@ class MMD(object):
             __y = torch.tensor(y) if isinstance(x, numpy.ndarray) else y
             rep_x, rep_y = __x, __y
         # end if
+
+        if hasattr(self.kernel_function_obj, 'log_sigma') and self.kernel_function_obj.log_sigma.item() == -1.0:
+            # if block for special case. When a kernel has log_sigma parameter and log_sigma is not given by an user.
+            assert hasattr(self.kernel_function_obj, 'get_median') and \
+                   callable(getattr(self.kernel_function_obj, 'get_median'))
+
+            log_sigma_estimated: float = self.kernel_function_obj.get_median(rep_x, rep_y)
+            if hasattr(self.kernel_function_obj, 'opt_sigma') and self.kernel_function_obj.opt_sigma is True:
+                self.kernel_function_obj.log_sigma = torch.tensor(log_sigma_estimated, device=self.device_obj,
+                                                                  requires_grad=True)
+            else:
+                self.kernel_function_obj.log_sigma = torch.tensor(log_sigma_estimated, device=self.device_obj)
+        # end if
+
         mmd2, ratio = self.process_mmd2_and_ratio(rep_x, rep_y, **kwargs)
         if is_detach:
             return MmdValues(mmd2.cpu().detach(), ratio.cpu().detach())
