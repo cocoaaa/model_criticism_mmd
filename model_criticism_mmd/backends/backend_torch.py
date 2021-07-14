@@ -438,8 +438,13 @@ class ModelTrainerTorchBackend(TrainerBase):
         params_target = [self.scales] + list(kernel_params_target.values())
         optimizer = torch.optim.SGD(params_target, lr=lr, momentum=0.9, nesterov=True)
 
-        self.run_validation(dataset_validation, reg, batchsize, num_workers, is_shuffle, is_validation_all,
-                            is_first_iter=True, is_gc=is_gc)
+        avg_mmd2, avg_obj, avg_stat = self.run_validation(dataset_validation, reg, batchsize, num_workers, is_shuffle, is_validation_all,
+                                                          is_first_iter=True, is_gc=is_gc)
+        if avg_mmd2.detach().numpy().tolist() < 0.0:
+            raise Exception(f'MMD2 is minus value, which is against the principle. '
+                            f'Stop training. Your MMD2 on validation is {avg_mmd2}')
+        # end if
+
         # procedure of trainings
         training_log = []
         for epoch in range(1, num_epochs + 1):
