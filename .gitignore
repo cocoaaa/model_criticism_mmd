@@ -3,7 +3,6 @@
 *pyc
 .ipynb_checkpoints
 dist
-poetry.lock
 model_criticism_mmd-*
 *pickle
 opt/
