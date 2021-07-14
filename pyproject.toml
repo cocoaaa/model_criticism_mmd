@@ -18,13 +18,12 @@ nptyping = "^1.4.1"
 numpy = "*"
 gpytorch = "*"
 scikit-learn = "*"
-tslearn = "*"
 numba = "*"
 Cython = "*"
 h5py = "*"
-lasagne = { version = "*", optional = true }
-theano = { version = "^1.0.5", optional = true }
-shogun = { version = "*", optional = true }
+lasagne = { url = "https://github.com/Lasagne/Lasagne/archive/master.zip" }
+theano = { url = "https://github.com/Theano/Theano/archive/master.zip" }
+# shogun = { version = "*", optional = true }
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.3"
@@ -39,5 +38,5 @@ requires = ["setuptools", "poetry", "poetry_core>=1.0", "cython"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.extras]
-full = ["lasagne", "theano", "shogun"]
+full = ["lasagne", "theano"]
 

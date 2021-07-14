@@ -110,7 +110,7 @@ class MMD(object):
             __min_var_est = min_var_est
         # end if
         mmd2, var_est = self._mmd2_and_variance(k_xx, k_xy, k_yy, unit_diagonal=unit_diagonal)
-        if mmd2.detach().numpy().tolist() < 0.0:
+        if mmd2.item() < 0.0:
             logger.warning(f'Be careful. MMD2 is minus value, which is against the principle. '
                            f'MMD2 is automatically set into 0.0. Your current MMD2 = {mmd2}')
         # end if
@@ -170,12 +170,12 @@ class MMD(object):
         self.kernel_function_obj.check_data_shape(y)
 
         if self.scales is not None:
-            __x = torch.tensor(x) if isinstance(x, numpy.ndarray) else x
-            __y = torch.tensor(y) if isinstance(x, numpy.ndarray) else y
+            __x = torch.tensor(x, device=self.device_obj) if isinstance(x, numpy.ndarray) else x
+            __y = torch.tensor(y, device=self.device_obj) if isinstance(x, numpy.ndarray) else y
             rep_x, rep_y = self.operation_scale_product(self.scales, __x, __y)
         else:
-            __x = torch.tensor(x) if isinstance(x, numpy.ndarray) else x
-            __y = torch.tensor(y) if isinstance(x, numpy.ndarray) else y
+            __x = torch.tensor(x, device=self.device_obj) if isinstance(x, numpy.ndarray) else x
+            __y = torch.tensor(y, device=self.device_obj) if isinstance(x, numpy.ndarray) else y
             rep_x, rep_y = __x, __y
         # end if
 
@@ -458,7 +458,7 @@ class ModelTrainerTorchBackend(TrainerBase):
 
         avg_mmd2, avg_obj, avg_stat = self.run_validation(dataset_validation, reg, batchsize, num_workers, is_shuffle, is_validation_all,
                                                           is_first_iter=True, is_gc=is_gc)
-        if avg_mmd2.detach().numpy().tolist() < 0.0:
+        if avg_mmd2.item() < 0.0:
             raise Exception(f'MMD2 is minus value, which is against the principle. '
                             f'Stop training. Your MMD2 on validation is {avg_mmd2}')
         # end if

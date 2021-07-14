@@ -17,8 +17,8 @@ class TwoSampleDataSet(torch.utils.data.Dataset):
                  value_padding: float = np.nan):
         assert isinstance(x, (torch.Tensor, np.ndarray))
         assert isinstance(y, (torch.Tensor, np.ndarray))
-        self.x = x if isinstance(x, torch.Tensor) else torch.tensor(x)
-        self.y = y if isinstance(y, torch.Tensor) else torch.tensor(y)
+        self.x = x if isinstance(x, torch.Tensor) else torch.tensor(x, device=device_obj)
+        self.y = y if isinstance(y, torch.Tensor) else torch.tensor(y, device=device_obj)
         self.length_x = len(x)
         self.length_y = len(y)
         self.value_padding = value_padding
@@ -82,8 +82,8 @@ class TwoSampleIterDataSet(torch.utils.data.IterableDataset):
                  working_dir: pathlib.Path = None):
         assert isinstance(x, (torch.Tensor, np.ndarray))
         assert isinstance(y, (torch.Tensor, np.ndarray))
-        x = x if isinstance(x, torch.Tensor) else torch.tensor(x)
-        y = y if isinstance(y, torch.Tensor) else torch.tensor(y)
+        x = x if isinstance(x, torch.Tensor) else torch.tensor(x, device=device_obj)
+        y = y if isinstance(y, torch.Tensor) else torch.tensor(y, device=device_obj)
 
         if working_dir is None:
             working_dir__ = pathlib.Path(tempfile.mktemp())
