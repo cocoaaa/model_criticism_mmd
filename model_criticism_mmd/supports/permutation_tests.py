@@ -15,11 +15,12 @@ class PermutationTest(object):
     def __init__(self,
                  mmd_estimator: MMD,
                  dataset: TwoSampleDataSet,
-                 n_permutation_test: int = 250,
+                 n_permutation_test: int = 1000,
                  batch_size: int = 256,
                  device_obj: torch.device = torch.device('cpu'),
                  is_shuffle: bool = False,
-                 is_mmd2_gamma: bool = False):
+                 is_mmd2_gamma: bool = False,
+                 is_normalize: bool = False):
         """A class to run Permutation test.
 
         Examples:
@@ -39,6 +40,7 @@ class PermutationTest(object):
             device_obj: cuda or cpu
             is_mmd2_gamma: for a very fast, but not consistent test based on moment matching of a Gamma distribution, as described in
              Arthur Gretton et. al. "Optimal kernel choice for large-scale two-sample tests". NIPS 2012: 1214-1222.
+            is_normalize:
         """
 
         self.mmd_estimator = mmd_estimator
@@ -49,6 +51,7 @@ class PermutationTest(object):
         self.is_mmd2_gamma = is_mmd2_gamma
         self.n_permutation_test = n_permutation_test
         self.stats_permutation_test: typing.Optional[np.ndarray] = None
+        self.is_normalize = is_normalize
 
     def __compute_mmd(self, num_workers: int = 1) -> torch.Tensor:
         if len(self.dataset) < self.batch_size:
@@ -99,7 +102,10 @@ class PermutationTest(object):
         for i in range_:
             np.random.shuffle(z.numpy())  # SOLUTION
             mmd_values = self.mmd_estimator.mmd_distance(z[:n_x], z[n_x:])
-            stats.append(mmd_values.mmd.detach().cpu().numpy())
+            if self.is_normalize:
+                stats.append(self.normalize_statistic(mmd_values.mmd).detach().cpu().numpy())
+            else:
+                stats.append(mmd_values.mmd.detach().cpu().numpy())
         # end for
         return np.array(stats)
 
@@ -130,8 +136,11 @@ class PermutationTest(object):
         """computing MMD value for whole dataset.
         Note: if N(data) > batch_size, statistics is avg(mmd) over batch_size"""
         statistics = self.__compute_mmd()
-        normalized_statistic = self.normalize_statistic(statistics)
-        return normalized_statistic.detach().cpu().numpy()
+        if self.is_normalize:
+            normalized_statistic = self.normalize_statistic(statistics)
+            return normalized_statistic.detach().cpu().numpy()
+        else:
+            return statistics.detach().numpy()
 
     def compute_p_value(self, statistic: np.ndarray) -> float:
         """Compute p-value based on the permutation tests.
