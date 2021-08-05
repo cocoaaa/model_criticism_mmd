@@ -3,7 +3,7 @@ import numpy as np
 import typing
 import pathlib
 
-from model_criticism_mmd import ModelTrainerTorchBackend, ModelTrainerTheanoBackend, MMD, split_data
+from model_criticism_mmd import MMD
 from model_criticism_mmd.backends.kernels_torch import BasicRBFKernelFunction
 from model_criticism_mmd.supports.permutation_tests import PermutationTest
 from model_criticism_mmd.models import TwoSampleDataSet
@@ -36,4 +36,4 @@ def test_basic_permutation_test(resource_path_root):
 
 
 if __name__ == '__main__':
-    test_basic_permutation_test(pathlib.Path('../resources'))
+    test_basic_permutation_test(pathlib.Path('../../resources'))
