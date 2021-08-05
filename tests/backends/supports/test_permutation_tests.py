@@ -22,8 +22,7 @@ def data_processor(resource_path_root: pathlib.Path
 
 
 def test_basic_permutation_test(resource_path_root):
-    # x_train, y_train, x_test, y_test = data_processor(resource_path_root)
-    n_run_test = 5
+    n_run_test = 1
 
     init_scale = torch.tensor(np.array([0.05, 0.55]))
     device_obj = torch.device(torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
@@ -31,6 +30,8 @@ def test_basic_permutation_test(resource_path_root):
     mmd_estimator = MMD(kernel_function_obj=kernel_function, device_obj=device_obj, scales=init_scale)
 
     p_values = []
+    np.random.seed(seed=1)
+
     for test_trial in range(0, n_run_test):
         x = np.random.normal(3, 0.5, size=(500, 2))
         y = np.random.normal(3, 0.5, size=(500, 2))

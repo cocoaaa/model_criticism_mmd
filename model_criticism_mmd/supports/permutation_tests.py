@@ -16,7 +16,7 @@ class PermutationTest(object):
                  mmd_estimator: MMD,
                  dataset: TwoSampleDataSet,
                  n_permutation_test: int = 1000,
-                 batch_size: int = 256,
+                 batch_size: int = -1,
                  device_obj: torch.device = torch.device('cpu'),
                  is_shuffle: bool = False,
                  is_mmd2_gamma: bool = False,
@@ -36,11 +36,12 @@ class PermutationTest(object):
             mmd_estimator: MMD object with a specified kernel.
             dataset: a dataset.
             batch_size: a batch size to compute MMD value for the whole dataset.
+            the default is -1, which means non-division into batches.
             is_shuffle: a option in computing MMD value for the whole dataset.
             device_obj: cuda or cpu
             is_mmd2_gamma: for a very fast, but not consistent test based on moment matching of a Gamma distribution, as described in
              Arthur Gretton et. al. "Optimal kernel choice for large-scale two-sample tests". NIPS 2012: 1214-1222.
-            is_normalize:
+            is_normalize: boolena. True, then normalization. False, not.
         """
 
         self.mmd_estimator = mmd_estimator
@@ -54,7 +55,7 @@ class PermutationTest(object):
         self.is_normalize = is_normalize
 
     def __compute_mmd(self, num_workers: int = 1) -> torch.Tensor:
-        if len(self.dataset) < self.batch_size:
+        if self.batch_size == -1 or len(self.dataset) < self.batch_size:
             x, y = self.dataset.get_all_item()
             return self.mmd_estimator.mmd_distance(x, y).mmd
         else:
