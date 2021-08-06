@@ -20,7 +20,8 @@ class MMD(object):
                  scales: typing.Optional[torch.Tensor] = None,
                  device_obj: torch.device = device_default,
                  biased: bool = True):
-        """
+        """A class for a MMD estimator.
+
         Args:
             kernel_function_obj: Kernel function by your preference.
             scales: A vector to scales x and y. A scaling operation is elementwise-product.
@@ -33,6 +34,21 @@ class MMD(object):
         self.min_var_est = torch.tensor([1e-8], dtype=torch.float64, device=device_obj)
         self.scales = scales
         self.biased = biased
+
+    @classmethod
+    def from_trained_parameters(cls, trained_parameters: TrainedMmdParameters, device_obj: torch.device) -> "MMD":
+        """A class method to initialize a MMD estimator from the trained parameter object.
+
+        Args:
+            trained_parameters: a trained parameter object.
+            device_obj: cpu or cuda.
+
+        Returns: MMD estimator
+        """
+        tensor_scales = torch.tensor(trained_parameters.scales)
+        estimator = MMD(kernel_function_obj=trained_parameters.kernel_function_obj,
+                        scales=tensor_scales, device_obj=device_obj)
+        return estimator
 
     def _mmd2_and_variance(self,
                            k_xx: torch.Tensor,
