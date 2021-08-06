@@ -9,7 +9,7 @@ import torch
 
 class SelectionKernels(object):
     def __init__(self,
-                 candidate_kernels: typing.List[typing.Tuple[torch.Tensor, BaseKernel]],
+                 candidate_kernels: typing.List[typing.Tuple[typing.Optional[torch.Tensor], BaseKernel]],
                  dataset_validation: TwoSampleDataSet,
                  device_obj: torch.device = torch.device('cpu'),
                  is_training: bool = False,
@@ -20,7 +20,8 @@ class SelectionKernels(object):
         which is represented "ratio" in the codes.
 
         Args:
-            candidate_kernels: List object. Elements of lists are tuple (scale-vector, kernel object)
+            candidate_kernels: List object. Elements of lists are tuple (scale-vector, kernel object).
+            The scale-vector can be None object. If the vector is None, the vector is initialized with -1 values.
             dataset_validation: a dataset object for validations.
             device_obj: device object of Torch.
             is_training: boolean. If True, then it runs optimization of parameters.
@@ -40,6 +41,11 @@ class SelectionKernels(object):
     def run_selection(self) -> typing.List[typing.Tuple[BaseKernel, float]]:
         results = []
         for scale, kernel_obj in self.candidate_kernels:
+            if scale is None:
+                size_vector_dimension = self.dataset_validation.get_dimension()
+                vector_one = torch.ones(size_vector_dimension)
+                scale = vector_one
+            # end if
             mmd_estimator = MMD(kernel_function_obj=kernel_obj, scales=scale, device_obj=self.device_obj)
             if self.is_training:
                 trainer_obj = ModelTrainerTorchBackend(mmd_estimator=mmd_estimator, device_obj=self.device_obj)
