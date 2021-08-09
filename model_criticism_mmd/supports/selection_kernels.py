@@ -42,7 +42,7 @@ class SelectionKernels(object):
         results = []
         for scale, kernel_obj in self.candidate_kernels:
             if scale is None:
-                size_vector_dimension = self.dataset_validation.get_dimension()
+                size_vector_dimension, size_vector_short = self.dataset_validation.get_dimension()
                 vector_one = torch.ones(size_vector_dimension)
                 scale = vector_one
             # end if

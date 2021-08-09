@@ -34,6 +34,7 @@ def test_selection_kernels_with_training():
     y_test = np.random.normal(3, 0.5, size=(100, 2))
     dataset_validation = TwoSampleDataSet(x_test, y_test, device_obj)
 
+    # with the given scales
     scales = torch.tensor([0.05, 0.05])
     kernels = [(scales, BasicRBFKernelFunction(device_obj=device_obj)),
                (scales, MaternKernelFunction(nu=0.5, device_obj=device_obj))]
@@ -41,7 +42,16 @@ def test_selection_kernels_with_training():
                                      dataset_validation=dataset_validation,
                                      dataset_training=dataset_train,
                                      is_training=True,
-                                     num_epochs=250)
+                                     num_epochs=100)
+    result_select = selection_obj.run_selection()
+    # without any given scales
+    kernels = [(None, BasicRBFKernelFunction(device_obj=device_obj)),
+               (None, MaternKernelFunction(nu=0.5, device_obj=device_obj))]
+    selection_obj = SelectionKernels(candidate_kernels=kernels,
+                                     dataset_validation=dataset_validation,
+                                     dataset_training=dataset_train,
+                                     is_training=True,
+                                     num_epochs=100)
     result_select = selection_obj.run_selection()
 
 
