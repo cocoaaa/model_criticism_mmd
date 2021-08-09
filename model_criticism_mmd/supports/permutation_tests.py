@@ -7,9 +7,7 @@ import numpy as np
 from datetime import datetime
 from tqdm import tqdm
 
-from model_criticism_mmd.logger_unit import logger
 from model_criticism_mmd.backends.backend_torch import MMD
-from model_criticism_mmd.models import MmdValues
 from model_criticism_mmd.models.datasets import TwoSampleDataSet
 
 

@@ -1,13 +1,26 @@
 from model_criticism_mmd.models.datasets import TwoSampleDataSet
 from model_criticism_mmd.backends.kernels_torch.base import BaseKernel
 from model_criticism_mmd.backends.backend_torch import ModelTrainerTorchBackend, MMD
+from model_criticism_mmd.models import TrainedMmdParameters
 from model_criticism_mmd.logger_unit import logger
 
-import collections
+
 import typing
 import torch
+import dataclasses
 
-SelectedKernel = collections.namedtuple('SelectedKernel', ('kernel', 'test_power', 'trained_mmd_parameter'))
+
+@dataclasses.dataclass
+class SelectedKernel(object):
+    kernel: BaseKernel
+    test_power: float
+    trained_mmd_parameter: typing.Optional[TrainedMmdParameters] = None
+
+    def __str__(self):
+        return f'Kernel-type: {self.kernel}. Test-power: {self.test_power}'
+
+    def __repr__(self):
+        return self.__str__()
 
 
 class SelectionKernels(object):
@@ -69,5 +82,5 @@ class SelectionKernels(object):
             logger.info(f'Kernel-type: {kernel_obj} Ratio: {test_power}')
             results.append(SelectedKernel(kernel_obj, test_power, trained_params))
         # end for
-        sorted_result = list(sorted(results, key=lambda t: t[1], reverse=True))
+        sorted_result = list(sorted(results, key=lambda t: t.test_power, reverse=True))
         return sorted_result
