@@ -48,5 +48,36 @@ def test_basic_permutation_test(resource_path_root):
     assert ratio_same_distribution > 0.7, 'Something strange in Permutation test.'
 
 
+def test_all_same_value():
+    """Test of an extreme case where MMD-statistics is always the same value.
+    In the case, p-value should be 1.0"""
+    init_scale = torch.tensor(np.array([0.05] * 5))
+    device_obj = torch.device(torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
+    kernel_function = BasicRBFKernelFunction(log_sigma=0.0, device_obj=device_obj, opt_sigma=True)
+    mmd_estimator = MMD(kernel_function_obj=kernel_function, device_obj=device_obj, scales=init_scale)
+    x = np.full((100, 5), 15)
+    dataset_train = TwoSampleDataSet(x, x, device_obj)
+    test_operator = PermutationTest(mmd_estimator=mmd_estimator, dataset=dataset_train)
+    mmd_value = test_operator.compute_statistic()
+    p_value = test_operator.compute_p_value(mmd_value)
+    assert p_value == 1.0, f'{p_value}'
+
+
+def test_statistic_greater_than_permutations():
+    """Test case that statistic is greater than all values from permutation test.
+    Note that the test is for an extreme case."""
+    init_scale = torch.tensor(np.array([0.05] * 5))
+    device_obj = torch.device(torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
+    kernel_function = BasicRBFKernelFunction(log_sigma=0.0, device_obj=device_obj, opt_sigma=True)
+    mmd_estimator = MMD(kernel_function_obj=kernel_function, device_obj=device_obj, scales=init_scale)
+    x = np.full((100, 5), 15)
+    dataset_train = TwoSampleDataSet(x, x, device_obj)
+    test_operator = PermutationTest(mmd_estimator=mmd_estimator, dataset=dataset_train)
+    p_value = test_operator.compute_p_value(np.array([100000000.0]))
+    assert p_value == 0.0, f'{p_value}'
+
+
 if __name__ == '__main__':
+    test_statistic_greater_than_permutations()
+    test_all_same_value()
     test_basic_permutation_test(pathlib.Path('../../resources'))

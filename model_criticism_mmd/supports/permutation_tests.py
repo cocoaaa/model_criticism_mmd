@@ -154,9 +154,19 @@ class PermutationTest(object):
         if self.stats_permutation_test is None:
             self.stats_permutation_test = self.sample_null(num_permutations=self.n_permutation_test)
         # end if
-        values_sorted = np.sort(self.stats_permutation_test)
-        i = self.find_position_to_insert(values_sorted, statistic)
-        return 1.0 - i / len(self.stats_permutation_test)
+        # check if all values are the same
+        is_all_same: np.bool = np.all(self.stats_permutation_test == self.stats_permutation_test[0])
+        is_all_same_statistics = np.all(self.stats_permutation_test == statistic)
+        # check if greater value than the given statistic
+        is_greater: np.bool = np.any(self.stats_permutation_test[self.stats_permutation_test > statistic])
+        if is_all_same and is_all_same_statistics:
+            return 1.0
+        elif is_greater == False:
+            return 0.0
+        else:
+            values_sorted = np.sort(self.stats_permutation_test)
+            i = self.find_position_to_insert(values_sorted, statistic)
+            return 1.0 - i / len(self.stats_permutation_test)
 
     @staticmethod
     def find_position_to_insert(values_sorted: np.ndarray, statistic: np.ndarray) -> int:

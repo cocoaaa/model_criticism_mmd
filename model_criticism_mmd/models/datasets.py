@@ -15,6 +15,15 @@ class TwoSampleDataSet(torch.utils.data.Dataset):
                  y: TypeInputData,
                  device_obj: torch.device,
                  value_padding: float = np.nan):
+        """Simple Dataset class for Two sample tests. The class inherits torch.utils.data.Dataset.
+
+        Args:
+            x: torch.tensor or numpy.ndarray
+            y: torch.tensor or numpy.ndarray
+            device_obj: torch.device
+            value_padding: a value to pad tensor.
+            The options is used only either when x and y have different sample size or different feature size.
+        """
         assert isinstance(x, (torch.Tensor, np.ndarray))
         assert isinstance(y, (torch.Tensor, np.ndarray))
         self.x = x if isinstance(x, torch.Tensor) else torch.tensor(x, device=device_obj)
