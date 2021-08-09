@@ -3,8 +3,11 @@ from model_criticism_mmd.backends.kernels_torch.base import BaseKernel
 from model_criticism_mmd.backends.backend_torch import ModelTrainerTorchBackend, MMD
 from model_criticism_mmd.logger_unit import logger
 
+import collections
 import typing
 import torch
+
+SelectedKernel = collections.namedtuple('SelectedKernel', ('kernel', 'test_power', 'trained_mmd_parameter'))
 
 
 class SelectionKernels(object):
@@ -38,7 +41,7 @@ class SelectionKernels(object):
         self.num_epochs = num_epochs
         self.batchsize = batchsize
 
-    def run_selection(self) -> typing.List[typing.Tuple[BaseKernel, float]]:
+    def run_selection(self) -> typing.List[SelectedKernel]:
         results = []
         for scale, kernel_obj in self.candidate_kernels:
             if scale is None:
@@ -57,13 +60,14 @@ class SelectionKernels(object):
                                             scales=torch.tensor(trained_params.scales),
                                             device_obj=self.device_obj)
                 mmd_estimator = trained_mmd_estimator
+            else:
+                trained_params = None
             # end if
             val_x, val_y = self.dataset_validation.get_all_item()
             mmd_result = mmd_estimator.mmd_distance(x=val_x, y=val_y)
             test_power = mmd_result.ratio.detach().cpu().numpy()[0]
             logger.info(f'Kernel-type: {kernel_obj} Ratio: {test_power}')
-            results.append((kernel_obj, test_power))
+            results.append(SelectedKernel(kernel_obj, test_power, trained_params))
         # end for
         sorted_result = list(sorted(results, key=lambda t: t[1], reverse=True))
         return sorted_result
-

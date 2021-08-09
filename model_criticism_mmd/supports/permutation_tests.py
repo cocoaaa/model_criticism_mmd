@@ -2,7 +2,9 @@
 import torch
 import math
 import typing
+import random
 import numpy as np
+from datetime import datetime
 from tqdm import tqdm
 
 from model_criticism_mmd.logger_unit import logger
@@ -101,8 +103,11 @@ class PermutationTest(object):
             range_ = tqdm(range_)
 
         for i in range_:
-            np.random.shuffle(z.numpy())  # SOLUTION
-            mmd_values = self.mmd_estimator.mmd_distance(z[:n_x], z[n_x:])
+            z_a_ind = random.Random(datetime.now().microsecond).sample(range(0, len(z)), n_x)
+            z_b_ind = list(set(range(0, len(z))) - set(z_a_ind))
+            z_a = z[z_a_ind, :]
+            z_b = z[z_b_ind, :]
+            mmd_values = self.mmd_estimator.mmd_distance(z_a, z_b)
             if self.is_normalize:
                 stats.append(self.normalize_statistic(mmd_values.mmd).detach().cpu().numpy())
             else:

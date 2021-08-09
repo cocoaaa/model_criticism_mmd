@@ -77,7 +77,23 @@ def test_statistic_greater_than_permutations():
     assert p_value == 0.0, f'{p_value}'
 
 
+def test_fixed_random_seed():
+    init_scale = torch.tensor(np.array([0.05, 0.55]))
+    device_obj = torch.device(torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
+    kernel_function = BasicRBFKernelFunction(log_sigma=0.0, device_obj=device_obj, opt_sigma=True)
+    mmd_estimator = MMD(kernel_function_obj=kernel_function, device_obj=device_obj, scales=init_scale)
+    np.random.seed(seed=1)
+    x = np.random.normal(3, 0.5, size=(500, 2))
+    y = np.random.normal(5, 5.5, size=(500, 2))
+    dataset_train = TwoSampleDataSet(x, y, device_obj)
+    test_operator = PermutationTest(mmd_estimator=mmd_estimator, dataset=dataset_train)
+    result_permutations = test_operator.sample_null()
+    print(result_permutations)
+
+
 if __name__ == '__main__':
+    test_fixed_random_seed()
+    test_basic_permutation_test(pathlib.Path('../../resources'))
     test_statistic_greater_than_permutations()
     test_all_same_value()
-    test_basic_permutation_test(pathlib.Path('../../resources'))
+
