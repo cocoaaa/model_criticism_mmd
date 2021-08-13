@@ -6,4 +6,4 @@ dist
 model_criticism_mmd-*
 *pickle
 opt/
-note_experiments
+experiments_gitignore
