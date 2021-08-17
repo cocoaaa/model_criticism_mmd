@@ -54,7 +54,15 @@ class SelectionKernels(object):
         self.num_epochs = num_epochs
         self.batchsize = batchsize
 
-    def run_selection(self) -> typing.List[SelectedKernel]:
+    def run_selection(self, **kwargs) -> typing.List[SelectedKernel]:
+        """Run a selection of kernels.
+
+        Args:
+            **kwargs: Arguments for training,
+            except dataset_training, dataset_validation, num_epochs, batchsize, initial_scale
+
+        Returns: list of SelectedKernel object.
+        """
         results = []
         for scale, kernel_obj in self.candidate_kernels:
             if scale is None:
@@ -68,7 +76,9 @@ class SelectionKernels(object):
                 trained_params = trainer_obj.train(dataset_training=self.dataset_training,
                                                    dataset_validation=self.dataset_validation,
                                                    num_epochs=self.num_epochs,
-                                                   batchsize=self.batchsize)
+                                                   batchsize=self.batchsize,
+                                                   initial_scale=scale,
+                                                   **kwargs)
                 trained_mmd_estimator = MMD(kernel_function_obj=trained_params.kernel_function_obj,
                                             scales=torch.tensor(trained_params.scales),
                                             device_obj=self.device_obj)
