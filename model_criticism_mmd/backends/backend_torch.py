@@ -172,6 +172,22 @@ class MMD(object):
 
         return rep_p, rep_q
 
+    def set_length_median(self, x: torch.Tensor, y: torch.Tensor) -> None:
+        """Set kernel's scale-length into median value.
+
+        Args:
+            x: data x
+            y: data y
+
+        Returns: None
+        """
+        if isinstance(self.kernel_function_obj, kernels_torch.BasicRBFKernelFunction):
+            self.kernel_function_obj.set_lengthscale(x, y, is_log=True)
+        else:
+            self.kernel_function_obj.set_lengthscale(x, y, is_log=False)
+        # end if
+    # end if
+
     def mmd_distance(self,
                      x: TypeInputData,
                      y: TypeInputData,
@@ -195,18 +211,38 @@ class MMD(object):
             rep_x, rep_y = __x, __y
         # end if
 
-        if hasattr(self.kernel_function_obj, 'log_sigma') and self.kernel_function_obj.log_sigma.item() == -1.0:
-            # if block for special case. When a kernel has log_sigma parameter and log_sigma is not given by an user.
-            assert hasattr(self.kernel_function_obj, 'get_median') and \
-                   callable(getattr(self.kernel_function_obj, 'get_median'))
-
-            log_sigma_estimated: float = self.kernel_function_obj.get_median(rep_x, rep_y)
-            if hasattr(self.kernel_function_obj, 'opt_sigma') and self.kernel_function_obj.opt_sigma is True:
-                self.kernel_function_obj.log_sigma = torch.tensor(log_sigma_estimated, device=self.device_obj,
-                                                                  requires_grad=True)
-            else:
-                self.kernel_function_obj.log_sigma = torch.tensor(log_sigma_estimated, device=self.device_obj)
+        # if isinstance(self.kernel_function_obj, kernels_torch.BasicRBFKernelFunction):
+        #     if self.kernel_function_obj.log_sigma.item() == -1.0:
+        #         # get median from the given data.
+        #         log_sigma_estimated: float = self.kernel_function_obj.get_median(rep_x, rep_y, is_log=True)
+        #         if self.kernel_function_obj.opt_sigma is True:
+        #             self.kernel_function_obj.log_sigma = torch.tensor(log_sigma_estimated, device=self.device_obj,
+        #                                                               requires_grad=True)
+        #         else:
+        #             self.kernel_function_obj.log_sigma = torch.tensor(log_sigma_estimated, device=self.device_obj)
+        #         # end if
+        #     # end if
+        # else:
+        #     assert hasattr(self.kernel_function_obj, 'lengthscale'), \
+        #         'The kernel_function_obj should have lengthscale attribute'
+        #     # how about cases of other kernels?
+        #     if self.kernel_function_obj.lengthscale == -1.0:
+        #         lengthscale_estimated: float = self.kernel_function_obj.get_median(rep_x, rep_y, is_log=False)
+        #         self.kernel_function_obj.lengthscale = lengthscale_estimated
+            # end if
         # end if
+        # if hasattr(self.kernel_function_obj, 'log_sigma') and self.kernel_function_obj.log_sigma.item() == -1.0:
+        #     # if block for special case. When a kernel has log_sigma parameter and log_sigma is not given by an user.
+        #     assert hasattr(self.kernel_function_obj, 'get_median') and \
+        #            callable(getattr(self.kernel_function_obj, 'get_median'))
+        #
+        #     log_sigma_estimated: float = self.kernel_function_obj.get_median(rep_x, rep_y)
+        #     if hasattr(self.kernel_function_obj, 'opt_sigma') and self.kernel_function_obj.opt_sigma is True:
+        #         self.kernel_function_obj.log_sigma = torch.tensor(log_sigma_estimated, device=self.device_obj,
+        #                                                           requires_grad=True)
+        #     else:
+        #         self.kernel_function_obj.log_sigma = torch.tensor(log_sigma_estimated, device=self.device_obj)
+        # # end if
 
         mmd2, ratio = self.process_mmd2_and_ratio(rep_x, rep_y, **kwargs)
         if is_detach:
@@ -432,6 +468,7 @@ class ModelTrainerTorchBackend(TrainerBase):
               auto_stop_threshold: float = 0.00001,
               is_shuffle: bool = False,
               is_validation_all: bool = False,
+              is_length_scale_median: bool = True,
               is_gc: bool = False) -> TrainedMmdParameters:
         """Training (Optimization) of MMD parameters.
 
@@ -455,6 +492,7 @@ class ModelTrainerTorchBackend(TrainerBase):
             if False, selected sequentially.
             is_validation_all: True, if you'd like to run validations with batch=1.
             False, then val. values will be averaged with the same batch-size of a training.
+            is_length_scale_median: if True, set a length-scale into median in force. False, do nothing.
             is_gc: True if you release memory after each batch, False no.
             Normally, the speed will be slower if is_gc=True. You use the option when memory leaks during trainings.
         Returns:
@@ -464,8 +502,14 @@ class ModelTrainerTorchBackend(TrainerBase):
         assert dataset_training.get_dimension() == dataset_validation.get_dimension()
 
         dimension_longer: int = dataset_training.get_dimension()[0]
+        # definition of scales
         self.scales = self.init_scales(size_dimension=dimension_longer, init_scale=initial_scale)
         self.mmd_estimator.scales = self.scales
+
+        # definition of length-scale into median
+        if is_length_scale_median or self.mmd_estimator.kernel_function_obj.lengthscale == -1.0:
+            self.mmd_estimator.set_length_median(*dataset_training.get_all_item())
+        # end if
 
         # collects parameters to be optimized / set an optimizer
         kernel_params_target = self.mmd_estimator.kernel_function_obj.get_params(is_grad_param_only=True)
