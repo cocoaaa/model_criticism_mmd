@@ -4,7 +4,7 @@ import pathlib
 import torch
 import typing
 import numpy as np
-from model_criticism_mmd.models.static import TypeInputData
+from model_criticism_mmd.models.static import TypeInputData, DEFAULT_DEVICE
 from model_criticism_mmd.logger_unit import logger
 
 
@@ -13,7 +13,7 @@ class TwoSampleDataSet(torch.utils.data.Dataset):
     def __init__(self,
                  x: TypeInputData,
                  y: TypeInputData,
-                 device_obj: torch.device,
+                 device_obj: torch.device = DEFAULT_DEVICE,
                  value_padding: float = np.nan):
         """Simple Dataset class for Two sample tests. The class inherits torch.utils.data.Dataset.
 
@@ -86,7 +86,7 @@ class TwoSampleIterDataSet(torch.utils.data.IterableDataset):
     def __init__(self,
                  x: TypeInputData,
                  y: TypeInputData,
-                 device_obj: torch.device,
+                 device_obj: torch.device = DEFAULT_DEVICE,
                  value_padding: float = np.nan,
                  working_dir: pathlib.Path = None):
         assert isinstance(x, (torch.Tensor, np.ndarray))

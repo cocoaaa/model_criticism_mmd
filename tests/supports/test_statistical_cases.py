@@ -45,7 +45,8 @@ def test_evaluate_stats_tests():
     test_eval = StatsTestEvaluator(
         candidate_kernels=kernels_opt,
         kernels_no_optimization=kernels_non_opt,
-        num_epochs=10
+        num_epochs=10,
+        n_permutation_test=100
     )
     evals_1 = test_eval.interface(code_approach='test-1', x=x, y_same=y_same, y_diff=y_diff)
     evals_2 = test_eval.interface(code_approach='test-2', x=x, y_same=y_same, y_diff=y_diff)
@@ -55,3 +56,7 @@ def test_evaluate_stats_tests():
     print(result_text)
     result_table = eval_formatter.format_result_table()
     print(tabulate(result_table))
+
+
+if __name__ == '__main__':
+    test_evaluate_stats_tests()

@@ -5,8 +5,8 @@ import typing
 from torch.utils.data import Dataset
 from torch import Tensor
 from model_criticism_mmd.logger_unit import logger
-from model_criticism_mmd.models import TrainingLog, TrainedMmdParameters, TrainerBase, MmdValues, TypeInputData, \
-    TwoSampleDataSet
+from model_criticism_mmd.models import TrainingLog, TrainedMmdParameters, TrainerBase, TwoSampleDataSet
+from model_criticism_mmd.models.static import MmdValues, TypeInputData, DEFAULT_DEVICE
 from model_criticism_mmd.backends import kernels_torch
 from model_criticism_mmd.exceptions import NanException
 import gc
@@ -18,7 +18,7 @@ class MMD(object):
     def __init__(self,
                  kernel_function_obj: kernels_torch.BaseKernel,
                  scales: typing.Optional[torch.Tensor] = None,
-                 device_obj: torch.device = device_default,
+                 device_obj: torch.device = DEFAULT_DEVICE,
                  biased: bool = True):
         """A class for a MMD estimator.
 
@@ -36,7 +36,8 @@ class MMD(object):
         self.biased = biased
 
     @classmethod
-    def from_trained_parameters(cls, trained_parameters: TrainedMmdParameters, device_obj: torch.device) -> "MMD":
+    def from_trained_parameters(cls, trained_parameters: TrainedMmdParameters,
+                                device_obj: torch.device = DEFAULT_DEVICE) -> "MMD":
         """A class method to initialize a MMD estimator from the trained parameter object.
 
         Args:
@@ -255,7 +256,7 @@ class ModelTrainerTorchBackend(TrainerBase):
     """A class to optimize MMD."""
     def __init__(self,
                  mmd_estimator: MMD,
-                 device_obj: torch.device = device_default):
+                 device_obj: torch.device = DEFAULT_DEVICE):
         self.mmd_estimator = mmd_estimator
         self.device_obj = device_obj
         self.obj_value_min_threshold = torch.tensor([1e-6], device=self.device_obj)
@@ -264,7 +265,7 @@ class ModelTrainerTorchBackend(TrainerBase):
     @classmethod
     def model_from_trained(cls,
                            parameter_obj: TrainedMmdParameters,
-                           device_obj: torch.device = device_default) -> "ModelTrainerTorchBackend":
+                           device_obj: torch.device = DEFAULT_DEVICE) -> "ModelTrainerTorchBackend":
         """returns ModelTrainerTorchBackend instance from the trained-parameters."""
         scales = torch.tensor(parameter_obj.scales, device=device_obj)
         model_obj = cls(mmd_estimator=MMD(kernel_function_obj=parameter_obj.kernel_function_obj,

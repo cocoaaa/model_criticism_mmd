@@ -6,7 +6,7 @@ import numpy as np
 
 from model_criticism_mmd.logger_unit import logger
 from model_criticism_mmd.backends.kernels_torch.base import BaseKernel, KernelMatrixObject
-
+from model_criticism_mmd.models.static import DEFAULT_DEVICE
 
 FloatOrTensor = Union[float, torch.Tensor]
 device_default = torch.device('cpu')
@@ -16,7 +16,7 @@ class BasicRBFKernelFunction(BaseKernel):
     """A Kernel class with Euclidean-distance
     """
     def __init__(self,
-                 device_obj: torch.device = device_default,
+                 device_obj: torch.device = DEFAULT_DEVICE,
                  log_sigma: Union[float, torch.Tensor] = -1.0,
                  opt_sigma: bool = False,
                  possible_shapes: typing.Tuple[int, ...] = (2,)):
@@ -47,7 +47,7 @@ class BasicRBFKernelFunction(BaseKernel):
                          y: torch.Tensor,
                          scales: torch.Tensor,
                          opt_sigma: bool = False,
-                         device_obj: torch.device = torch.device('cpu')) -> "BasicRBFKernelFunction":
+                         device_obj: torch.device = DEFAULT_DEVICE) -> "BasicRBFKernelFunction":
         """initialize RBFKernel with median heuristic.
         About the median heuristic, see https://arxiv.org/pdf/1707.07269.pdf
 

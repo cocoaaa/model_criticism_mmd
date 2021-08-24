@@ -1,4 +1,4 @@
-from model_criticism_mmd.models import TypeInputData, TwoSampleDataSet
+from model_criticism_mmd.models import TypeInputData, TwoSampleDataSet, DEFAULT_DEVICE
 import numpy as np
 import typing
 import torch
@@ -15,7 +15,7 @@ def to_tensor(data: np.ndarray) -> torch.Tensor:
 
 def split_data(x: TypeInputData,
                y: TypeInputData,
-               device_obj: torch.device,
+               device_obj: torch.device = DEFAULT_DEVICE,
                ratio_train: float = 0.8) -> typing.Tuple[TwoSampleDataSet, TwoSampleDataSet]:
     # data conversion
     x__ = to_tensor(x)

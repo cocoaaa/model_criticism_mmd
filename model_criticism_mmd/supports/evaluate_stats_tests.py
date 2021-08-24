@@ -1,5 +1,5 @@
 import pandas
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 import numpy as np
 import torch
 
@@ -82,10 +82,15 @@ class TestResultGroupsFormatter(object):
         else:
             raise NotImplementedError('undefined')
 
+    @staticmethod
+    def asdict(o: object) -> typing.Dict[str, typing.Any]:
+        return {k: v for k, v in o.__dict__.items() if not k == 'scales'}
+
     def format_result_table(self) -> pandas.DataFrame:
         # A method to output X=Y / X!= Y all passed.
         # classification test pass / type-1 / type-2
-        records = [asdict(r) for r in self.test_result]
+        records = [self.asdict(r) for r in self.test_result]
+
         df_res = pandas.DataFrame(records)
         df_res['test_result'] = df_res.apply(self.function_test_result_type, axis=1)
         df_output = df_res.reindex(columns=['codename_experiment', 'kernel', 'kernel_parameter', 'is_optimized',

@@ -1,18 +1,17 @@
 import torch
 from model_criticism_mmd.backends.kernels_torch.base import BaseKernel, KernelMatrixObject
 from gpytorch.kernels.matern_kernel import MaternKernel
-
+from model_criticism_mmd.models.static import DEFAULT_DEVICE
 import typing
 
 FloatOrTensor = typing.Union[float, torch.Tensor]
-device_default = torch.device('cpu')
 
 
 class MaternKernelFunction(BaseKernel):
     """A class for Matern Kernel."""
     def __init__(self,
                  nu: float,
-                 device_obj: torch.device = device_default,
+                 device_obj: torch.device = DEFAULT_DEVICE,
                  lengthscale: float = -1.0,
                  possible_shapes=(2,)):
         """init an object.

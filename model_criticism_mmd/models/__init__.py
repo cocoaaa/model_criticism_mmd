@@ -7,8 +7,6 @@ import pickle
 from model_criticism_mmd.models.datasets import *
 from model_criticism_mmd.models.static import *
 
-DEFAULT_DEVICE = torch.device('cpu')
-
 
 @dataclasses.dataclass
 class TrainingLog(object):

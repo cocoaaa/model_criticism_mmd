@@ -3,12 +3,12 @@ import torch
 from model_criticism_mmd.supports.selection_kernels import SelectionKernels
 from model_criticism_mmd.backends.kernels_torch import BasicRBFKernelFunction, MaternKernelFunction
 from model_criticism_mmd.models.datasets import TwoSampleDataSet
-
+from model_criticism_mmd.models import DEFAULT_DEVICE
 import numpy as np
 
 
 def test_selection_kernels_without_training():
-    device_obj = torch.device('cpu')
+    device_obj = DEFAULT_DEVICE
     x_train = np.random.normal(3, 0.5, size=(500, 2))
     y_train = np.random.normal(3, 0.5, size=(500, 2))
     dataset_train = TwoSampleDataSet(x_train, y_train, device_obj)
@@ -26,7 +26,7 @@ def test_selection_kernels_without_training():
 
 
 def test_selection_kernels_with_training():
-    device_obj = torch.device('cpu')
+    device_obj = DEFAULT_DEVICE
     x_train = np.random.normal(3, 0.5, size=(500, 2))
     y_train = np.random.normal(3, 0.5, size=(500, 2))
     dataset_train = TwoSampleDataSet(x_train, y_train, device_obj)
