@@ -4,10 +4,9 @@ from typing import Union
 
 import numpy as np
 
-from sklearn.metrics.pairwise import euclidean_distances
 from model_criticism_mmd.logger_unit import logger
 from model_criticism_mmd.backends.kernels_torch.base import BaseKernel, KernelMatrixObject
-
+from model_criticism_mmd.models.static import DEFAULT_DEVICE
 
 FloatOrTensor = Union[float, torch.Tensor]
 device_default = torch.device('cpu')
@@ -17,7 +16,7 @@ class BasicRBFKernelFunction(BaseKernel):
     """A Kernel class with Euclidean-distance
     """
     def __init__(self,
-                 device_obj: torch.device = device_default,
+                 device_obj: torch.device = DEFAULT_DEVICE,
                  log_sigma: Union[float, torch.Tensor] = -1.0,
                  opt_sigma: bool = False,
                  possible_shapes: typing.Tuple[int, ...] = (2,)):
@@ -39,24 +38,8 @@ class BasicRBFKernelFunction(BaseKernel):
             self.log_sigma = torch.tensor([log_sigma], requires_grad=opt_sigma, device=device_obj)
         else:
             raise TypeError('log_sigma should be tensor or float.')
-
-    @staticmethod
-    def get_median(rep_x: torch.Tensor,
-                   rep_y: torch.Tensor,
-                   minimum_sample: int = 500) -> float:
-        logger.info("Getting median initial sigma value...")
-        n_samp = min(minimum_sample, rep_x.shape[0], rep_y.shape[0])
-        samp = torch.cat([
-            rep_x[np.random.choice(rep_x.shape[0], n_samp, replace=False)],
-            rep_y[np.random.choice(rep_y.shape[0], n_samp, replace=False)],
-        ])
-        np_reps = samp.detach().cpu().numpy()
-        d2 = euclidean_distances(np_reps, squared=True)
-        med_sqdist = np.median(d2[np.triu_indices_from(d2, k=1)])
-        __init_log_sigma = np.log(med_sqdist / np.sqrt(2)) / 2
-        del samp, d2, med_sqdist
-        logger.info("initial sigma by median-heuristics {:.3g}".format(np.exp(__init_log_sigma)))
-        return __init_log_sigma
+        # for common use with base class
+        self.lengthscale = self.log_sigma
 
     @classmethod
     def init_with_median(cls,
@@ -64,7 +47,7 @@ class BasicRBFKernelFunction(BaseKernel):
                          y: torch.Tensor,
                          scales: torch.Tensor,
                          opt_sigma: bool = False,
-                         device_obj: torch.device = torch.device('cpu')) -> "BasicRBFKernelFunction":
+                         device_obj: torch.device = DEFAULT_DEVICE) -> "BasicRBFKernelFunction":
         """initialize RBFKernel with median heuristic.
         About the median heuristic, see https://arxiv.org/pdf/1707.07269.pdf
 
@@ -74,7 +57,7 @@ class BasicRBFKernelFunction(BaseKernel):
         # initialization of initial-sigma value
         rep_x = torch.mul(x, scales)
         rep_y = torch.mul(y, scales)
-        __init_log_sigma = cls.get_median(rep_x=rep_x, rep_y=rep_y)
+        __init_log_sigma = cls.get_median(x=rep_x, y=rep_y, is_log=True)
         return cls(
             device_obj=device_obj,
             log_sigma=__init_log_sigma,
@@ -114,3 +97,12 @@ class BasicRBFKernelFunction(BaseKernel):
             __ = {'log_sigma': self.log_sigma}
         # end if
         return __
+
+    def set_lengthscale(self, x: torch.Tensor, y: torch.Tensor, is_log: bool = True) -> None:
+        log_median = self.get_median(x, y, is_log=is_log)
+        self.lengthscale = log_median
+        if self.opt_sigma is True:
+            self.log_sigma = torch.tensor(log_median, device=self.device_obj, requires_grad=True)
+        else:
+            self.log_sigma = torch.tensor(log_median, device=self.device_obj)
+        # end if

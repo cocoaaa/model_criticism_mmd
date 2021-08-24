@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "model_criticism_mmd"
-version = "2.1"
+version = "2.2"
 description = "A Model criticism on distributions via MMD"
 authors = ["Kensuke Mitsuzawa <kensuke.mit@gmail.com>"]
 maintainers = ["Kensuke Mitsuzawa <kensuke.mit@gmail.com>"]
@@ -21,6 +21,7 @@ scikit-learn = "*"
 numba = "*"
 Cython = "*"
 h5py = "*"
+tabulate = "*"
 lasagne = { url = "https://github.com/Lasagne/Lasagne/archive/master.zip" }
 theano = { url = "https://github.com/Theano/Theano/archive/master.zip" }
 # shogun = { version = "*", optional = true }

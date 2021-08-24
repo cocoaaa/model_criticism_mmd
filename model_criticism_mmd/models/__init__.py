@@ -1,6 +1,3 @@
-import numpy
-
-from model_criticism_mmd.logger_unit import logger
 from model_criticism_mmd.backends.kernels_torch import BaseKernel
 
 import dataclasses

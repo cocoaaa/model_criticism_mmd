@@ -9,6 +9,7 @@ from tqdm import tqdm
 
 from model_criticism_mmd.backends.backend_torch import MMD
 from model_criticism_mmd.models.datasets import TwoSampleDataSet
+from model_criticism_mmd.models import DEFAULT_DEVICE
 
 
 class PermutationTest(object):
@@ -17,7 +18,7 @@ class PermutationTest(object):
                  dataset: TwoSampleDataSet,
                  n_permutation_test: int = 1000,
                  batch_size: int = -1,
-                 device_obj: torch.device = torch.device('cpu'),
+                 device_obj: torch.device = DEFAULT_DEVICE,
                  is_shuffle: bool = False,
                  is_mmd2_gamma: bool = False,
                  is_normalize: bool = False):

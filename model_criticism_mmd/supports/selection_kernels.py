@@ -1,7 +1,7 @@
 from model_criticism_mmd.models.datasets import TwoSampleDataSet
 from model_criticism_mmd.backends.kernels_torch.base import BaseKernel
 from model_criticism_mmd.backends.backend_torch import ModelTrainerTorchBackend, MMD
-from model_criticism_mmd.models import TrainedMmdParameters
+from model_criticism_mmd.models import TrainedMmdParameters, DEFAULT_DEVICE
 from model_criticism_mmd.logger_unit import logger
 
 
@@ -27,7 +27,7 @@ class SelectionKernels(object):
     def __init__(self,
                  candidate_kernels: typing.List[typing.Tuple[typing.Optional[torch.Tensor], BaseKernel]],
                  dataset_validation: TwoSampleDataSet,
-                 device_obj: torch.device = torch.device('cpu'),
+                 device_obj: torch.device = DEFAULT_DEVICE,
                  is_training: bool = False,
                  dataset_training: TwoSampleDataSet = None,
                  num_epochs: int = 500,
