@@ -47,16 +47,16 @@ class TestResultGroupsFormatter(object):
                               f'p-value={test_result.p_value}'
 
                 result_table = [[False, False], [False, False]]
-                if test_result.is_same_distribution_test:
+                if test_result.is_same_distribution_test and test_result.is_same_distribution_truth:
                     result_table[0][0] = True
-                else:
-                    result_table[1][0] = True
-                # end if
-
-                if test_result.is_same_distribution_truth:
+                elif test_result.is_same_distribution_truth and test_result.is_same_distribution_test is False:
                     result_table[0][1] = True
-                else:
+                elif test_result.is_same_distribution_truth is False and test_result.is_same_distribution_test is True:
+                    result_table[1][0] = True
+                elif test_result.is_same_distribution_truth is False and test_result.is_same_distribution_test is False:
                     result_table[1][1] = True
+                else:
+                    raise NotImplementedError('undefined')
                 # end if
 
                 df_out = pandas.DataFrame(result_table, index=[True, False], columns=[True, False])
