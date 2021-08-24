@@ -1,44 +1,110 @@
-from dataclasses import dataclass
+import pandas
+from dataclasses import dataclass, asdict
 import numpy as np
 import torch
 
 import typing
-import tqdm
+import itertools
 
 import math
 
 from model_criticism_mmd.models.datasets import TwoSampleDataSet
-from model_criticism_mmd import SelectionKernels, PermutationTest, MMD
-from model_criticism_mmd.supports.selection_kernels import SelectedKernel
+from model_criticism_mmd.supports.selection_kernels import SelectedKernel, SelectionKernels, MMD
+from model_criticism_mmd.supports.permutation_tests import PermutationTest
 from model_criticism_mmd.backends import kernels_torch
+from model_criticism_mmd.models import DEFAULT_DEVICE
 from model_criticism_mmd.logger_unit import logger
 
+from tabulate import tabulate
 
 @dataclass
 class TestResult(object):
     codename_experiment: str
     kernel_parameter: float
     kernel: str
-    is_same_distribution: bool
+    is_optimized: bool
+    is_same_distribution_truth: bool
+    is_same_distribution_test: bool
     ratio: float
     p_value: float
+    scales: torch.Tensor
+
 
 # todo
 @dataclass
-class TestResultGroups(object):
-    pass
-    # 実験/kernelごとにテーブルを作成する。True / Test result
+class TestResultGroupsFormatter(object):
+    test_result: typing.List[TestResult]
+
+    def format_test_result_summary(self) -> str:
+        # 実験/kernelごとにテーブルを作成する。True / Test result
+        result_text = ''
+
+        for  k, g_obj in itertools.groupby(sorted(self.test_result, key=lambda o: (o.codename_experiment, o.kernel)),
+                                           key=lambda o: (o.codename_experiment, o.kernel)):
+            for test_result in g_obj:
+                title_table = f'exp-code={test_result.codename_experiment}, Kernel={test_result.kernel} ' \
+                              f'with length_scale={test_result.kernel_parameter} optimization={test_result.is_optimized}\n' \
+                              f'p-value={test_result.p_value}'
+
+                result_table = [[False, False], [False, False]]
+                if test_result.is_same_distribution_test:
+                    result_table[0][0] = True
+                else:
+                    result_table[1][0] = True
+                # end if
+
+                if test_result.is_same_distribution_truth:
+                    result_table[0][1] = True
+                else:
+                    result_table[1][1] = True
+                # end if
+
+                df_out = pandas.DataFrame(result_table, index=[True, False], columns=[True, False])
+                df_out.index.name = 'Truth / Test'
+
+                result_text += title_table
+                result_text += '\n'
+                result_text += tabulate(df_out, headers='keys', tablefmt='psql')
+                result_text += '\n\n'
+            # end for
+        # end for
+        return result_text
+
+    @staticmethod
+    def function_test_result_type(record: pandas.DataFrame) -> str:
+        if record['is_same_distribution_truth'] and record['is_same_distribution_test']:
+            return 'pass'
+        elif record['is_same_distribution_truth'] is False and record['is_same_distribution_test'] is False:
+            return 'pass'
+        elif record['is_same_distribution_truth'] is True and record['is_same_distribution_test'] is False:
+            return 'error type-1'
+        elif record['is_same_distribution_truth'] is False and record['is_same_distribution_test'] is True:
+            return 'error type-2'
+        else:
+            raise NotImplementedError('undefined')
+
+    def format_result_table(self) -> pandas.DataFrame:
+        # A method to output X=Y / X!= Y all passed.
+        # classification test pass / type-1 / type-2
+        records = [asdict(r) for r in self.test_result]
+        df_res = pandas.DataFrame(records)
+        df_res['test_result'] = df_res.apply(self.function_test_result_type, axis=1)
+        df_output = df_res.reindex(columns=['codename_experiment', 'kernel', 'kernel_parameter', 'is_optimized',
+                                            'test_result', 'p_value', 'is_same_distribution_truth',
+                                            'is_same_distribution_test', 'ratio'])
+        return df_output
 
 
 class StatsTestEvaluator(object):
     def __init__(self,
                  candidate_kernels: typing.List[typing.Tuple[torch.Tensor, kernels_torch.BaseKernel]],
-                 device_obj: torch.device,
+                 device_obj: torch.device = DEFAULT_DEVICE,
                  num_epochs: int = 500,
                  n_permutation_test: int = 500,
                  initial_value_scales: typing.Optional[torch.Tensor] = None,
                  threshold_p_value: float = 0.05,
-                 ratio_training: float = 0.8):
+                 ratio_training: float = 0.8,
+                 kernels_no_optimization: typing.Optional[typing.List[kernels_torch.BaseKernel]] = None):
         self.candidate_kernels = candidate_kernels
         self.device_obj = device_obj
         self.num_epochs = num_epochs
@@ -46,6 +112,7 @@ class StatsTestEvaluator(object):
         self.initial_value_scales = initial_value_scales
         self.threshold_p_value = threshold_p_value
         self.ratio_training = ratio_training
+        self.kernels_no_optimization = kernels_no_optimization
 
     def function_separation(self, x: torch.Tensor, y: torch.Tensor) -> typing.Tuple[TwoSampleDataSet, TwoSampleDataSet]:
         ind_training = int((len(x) - 1) * self.ratio_training)
@@ -141,26 +208,30 @@ class StatsTestEvaluator(object):
                 name_kernel = f'{estimator_obj.kernel_function_obj.__class__.__name__}-nu={estimator_obj.kernel_function_obj.nu}'
             elif isinstance(estimator_obj.kernel_function_obj, kernels_torch.BasicRBFKernelFunction):
                 kernel_param = estimator_obj.kernel_function_obj.log_sigma.detach().numpy()
-                name_kernel = f'{estimator_obj.kernel_function_obj.__class__.__name__}-log-sigma={estimator_obj.kernel_function_obj.log_sigma}'
+                name_kernel = f'{estimator_obj.kernel_function_obj.__class__.__name__}'
             else:
                 kernel_param = math.nan
+                name_kernel = 'undefined'
             # end if
-
+            is_same_test = self.func_evaluation(__p)
             results.append(TestResult(codename_experiment=code_approach,
                                       kernel_parameter=kernel_param,
-                                      kernel=f'{estimator_obj.kernel_function_obj.__class__.__name__}',
-                                      is_same_distribution=is_same_distribution,
+                                      kernel=name_kernel,
+                                      is_same_distribution_truth=is_same_distribution,
+                                      is_same_distribution_test=is_same_test,
+                                      is_optimized=False if ratio is None else True,
                                       ratio=ratio,
-                                      p_value=__p))
+                                      p_value=__p,
+                                      scales=estimator_obj.scales))
         # end for
         return results
 
     def interface(self,
                   code_approach: str,
-                  x: torch.Tensor,
-                  y_same: torch.Tensor,
-                  y_diff: torch.Tensor,
-                  functions_no_optimization: typing.Optional[typing.List[kernels_torch.BaseKernel]] = None
+                  x: typing.Union[torch.Tensor, np.ndarray],
+                  y_same: typing.Union[torch.Tensor, np.ndarray],
+                  y_diff: typing.Union[torch.Tensor, np.ndarray],
+
                   ) -> typing.List[TestResult]:
         """Run permutation tests for cases where X=Y and X!=Y.
 
@@ -169,7 +240,6 @@ class StatsTestEvaluator(object):
             x:
             y_same:
             y_diff:
-            functions_no_optimization (optional): Kernel function without optimizations
 
         Returns: [TestResult]
         """
@@ -186,9 +256,9 @@ class StatsTestEvaluator(object):
         estimator_diff = [
             (MMD.from_trained_parameters(k_obj.trained_mmd_parameter, self.device_obj), k_obj.test_power)
              for k_obj in kernels_diff]
-        if functions_no_optimization is not None:
-            estimator_same += [(k_obj, None) for k_obj in functions_no_optimization]
-            estimator_diff += [(k_obj, None) for k_obj in functions_no_optimization]
+        if self.kernels_no_optimization is not None:
+            estimator_same += [(MMD(k_obj), None) for k_obj in self.kernels_no_optimization]
+            estimator_diff += [(MMD(k_obj), None) for k_obj in self.kernels_no_optimization]
         # end if
 
         tests_same = self.function_evaluation_all_kernels(x=x, y=y_same, mmd_estimators=estimator_same,
@@ -199,37 +269,3 @@ class StatsTestEvaluator(object):
                                                           is_same_distribution=False)
 
         return tests_same + tests_diff
-
-
-
-
-
-
-eval_results = []
-
-
-def sample_data_preparation():
-    x_data_sample = np.zeros((N_DATA_SIZE, N_TIME_LENGHTH))
-    y_data_sample = np.zeros((N_DATA_SIZE, N_TIME_LENGHTH))
-    y_data_sample_laplase = np.zeros((N_DATA_SIZE, N_TIME_LENGHTH))
-
-    x_data_sample[:, 0] = INITIAL_VALUE_AT_ONE
-    y_data_sample[:, 0] = INITIAL_VALUE_AT_ONE
-    y_data_sample_laplase[:, 0] = INITIAL_VALUE_AT_ONE
-
-    for time_t in tqdm.tqdm(range(0, N_TIME_LENGHTH - 1)):
-        noise_x = np.random.normal(NOISE_MU_X, NOISE_SIGMA_X, (N_DATA_SIZE,))
-        noise_y = np.random.normal(NOISE_MU_Y, NOISE_SIGMA_Y, (N_DATA_SIZE,))
-        noise_y_laplase = np.random.laplace(NOISE_MU_Y, NOISE_SIGMA_Y, (N_DATA_SIZE,))
-        x_data_sample[:, time_t + 1] = x_data_sample[:, time_t].flatten() + noise_x
-        y_data_sample[:, time_t + 1] = y_data_sample[:, time_t].flatten() + noise_y
-        y_data_sample_laplase[:, time_t + 1] = y_data_sample_laplase[:, time_t].flatten() + noise_y_laplase
-        # end if
-    assert x_data_sample.shape == (N_DATA_SIZE, N_TIME_LENGHTH)
-    assert y_data_sample.shape == (N_DATA_SIZE, N_TIME_LENGHTH)
-    assert y_data_sample_laplase.shape == (N_DATA_SIZE, N_TIME_LENGHTH)
-    assert np.array_equal(x_data_sample, y_data_sample) is False
-
-
-
-
