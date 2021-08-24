@@ -36,10 +36,9 @@ class TestResultGroupsFormatter(object):
     test_result: typing.List[TestResult]
 
     def format_test_result_summary(self) -> str:
-        # 実験/kernelごとにテーブルを作成する。True / Test result
         result_text = ''
 
-        for  k, g_obj in itertools.groupby(sorted(self.test_result, key=lambda o: (o.codename_experiment, o.kernel)),
+        for k, g_obj in itertools.groupby(sorted(self.test_result, key=lambda o: (o.codename_experiment, o.kernel)),
                                            key=lambda o: (o.codename_experiment, o.kernel)):
             for test_result in g_obj:
                 title_table = f'exp-code={test_result.codename_experiment}, Kernel={test_result.kernel} ' \
@@ -204,7 +203,7 @@ class StatsTestEvaluator(object):
             __test_operator, __p = self.function_permutation_test(estimator_obj, x, y)
 
             if isinstance(estimator_obj.kernel_function_obj, kernels_torch.MaternKernelFunction):
-                kernel_param = estimator_obj.kernel_function_obj.nu
+                kernel_param = estimator_obj.kernel_function_obj.gpy_kernel.lengthscale
                 name_kernel = f'{estimator_obj.kernel_function_obj.__class__.__name__}-nu={estimator_obj.kernel_function_obj.nu}'
             elif isinstance(estimator_obj.kernel_function_obj, kernels_torch.BasicRBFKernelFunction):
                 kernel_param = estimator_obj.kernel_function_obj.log_sigma.detach().numpy()
@@ -230,8 +229,7 @@ class StatsTestEvaluator(object):
                   code_approach: str,
                   x: typing.Union[torch.Tensor, np.ndarray],
                   y_same: typing.Union[torch.Tensor, np.ndarray],
-                  y_diff: typing.Union[torch.Tensor, np.ndarray],
-
+                  y_diff: typing.Union[torch.Tensor, np.ndarray]
                   ) -> typing.List[TestResult]:
         """Run permutation tests for cases where X=Y and X!=Y.
 
