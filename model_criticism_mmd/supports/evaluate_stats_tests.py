@@ -30,7 +30,6 @@ class TestResult(object):
     scales: torch.Tensor
 
 
-# todo
 @dataclass
 class TestResultGroupsFormatter(object):
     test_result: typing.List[TestResult]
@@ -70,7 +69,7 @@ class TestResultGroupsFormatter(object):
         return result_text
 
     @staticmethod
-    def function_test_result_type(record: pandas.DataFrame) -> str:
+    def function_test_result_type(record: typing.Union[pandas.DataFrame, typing.Dict]) -> str:
         if record['is_same_distribution_truth'] and record['is_same_distribution_test']:
             return 'pass'
         elif record['is_same_distribution_truth'] is False and record['is_same_distribution_test'] is False:
@@ -97,6 +96,42 @@ class TestResultGroupsFormatter(object):
                                             'test_result', 'p_value', 'is_same_distribution_truth',
                                             'is_same_distribution_test', 'ratio'])
         return df_output
+
+    def format_result_summary_table(self) -> pandas.DataFrame:
+        """Return a table that includes result of X=Y and X!=Y.
+        Aggregated by "code-name", "kernel-name" and "is_optimization"
+
+        Returns: DataFrame
+        """
+        records = [self.asdict(r) for r in self.test_result]
+        summary_record = []
+        for t_key, records in itertools.groupby(
+                sorted(self.test_result, key=lambda r: (r.codename_experiment, r.kernel, r.is_optimized)),
+                key=lambda r: (r.codename_experiment, r.kernel, r.is_optimized)):
+            new_record = {
+                'test-key': f'{t_key[0]}-{t_key[1]}-{t_key[2]}',
+                'X=Y': None,
+                'X!=Y': None
+            }
+            for r in records:
+                if r.is_same_distribution_truth:
+                    # X=Y
+                    if r.is_same_distribution_test is True:
+                        new_record['X=Y'] = 'pass'
+                    else:
+                        new_record['X=Y'] = 'error type-1'
+                else:
+                    # X!=Y
+                    if r.is_same_distribution_test is False:
+                        new_record['X!=Y'] = 'pass'
+                    else:
+                        new_record['X!=Y'] = 'error type-2'
+                # end if
+            # end for
+            summary_record.append(new_record)
+        # end for
+        df_res = pandas.DataFrame(summary_record)
+        return df_res
 
 
 class StatsTestEvaluator(object):
@@ -232,43 +267,63 @@ class StatsTestEvaluator(object):
 
     def interface(self,
                   code_approach: str,
-                  x: typing.Union[torch.Tensor, np.ndarray],
-                  y_same: typing.Union[torch.Tensor, np.ndarray],
-                  y_diff: typing.Union[torch.Tensor, np.ndarray]
+                  x_train: typing.Union[torch.Tensor, np.ndarray],
+                  x_eval: typing.Union[torch.Tensor, np.ndarray],
+                  y_train_same: typing.Optional[typing.Union[torch.Tensor, np.ndarray]] = None,
+                  y_train_diff: typing.Optional[typing.Union[torch.Tensor, np.ndarray]] = None,
+                  y_eval_same: typing.Optional[typing.Union[torch.Tensor, np.ndarray]] = None,
+                  y_eval_diff: typing.Optional[typing.Union[torch.Tensor, np.ndarray]] = None
                   ) -> typing.List[TestResult]:
         """Run permutation tests for cases where X=Y and X!=Y.
 
         Args:
             code_approach:
-            x:
-            y_same:
-            y_diff:
+            x_train: X data for training.
+            x_eval: X data for evaluation.
+            y_train_same: Y data for training. Y is from the same distribution.
+            y_train_diff: Y data for training. Y is from the different distribution.
+            y_eval_same: omit
+            y_eval_diff: omit
 
         Returns: [TestResult]
         """
-        # without normalization
-        ds_train_same, ds_val_same = self.function_separation(x=x, y=y_same)
-        ds_train_diff, ds_val_diff = self.function_separation(x=x, y=y_diff)
+        test_result = []
 
-        kernels_same = self.function_kernel_selection(ds_train=ds_train_same, ds_val=ds_val_same)
-        kernels_diff = self.function_kernel_selection(ds_train=ds_train_diff, ds_val=ds_val_diff)
+        if y_train_same is None and y_train_diff is None:
+            raise Exception('Either of y_train_same or y_train_diff should be given.')
 
-        estimator_same = [
-            (MMD.from_trained_parameters(k_obj.trained_mmd_parameter, self.device_obj), k_obj.test_power)
-            for k_obj in kernels_same]
-        estimator_diff = [
-            (MMD.from_trained_parameters(k_obj.trained_mmd_parameter, self.device_obj), k_obj.test_power)
-             for k_obj in kernels_diff]
-        if self.kernels_no_optimization is not None:
-            estimator_same += [(MMD(k_obj), None) for k_obj in self.kernels_no_optimization]
-            estimator_diff += [(MMD(k_obj), None) for k_obj in self.kernels_no_optimization]
+        if y_train_same is not None:
+            assert y_eval_same is not None
+            ds_train_same, ds_val_same = self.function_separation(x=x_train, y=y_train_same)
+            kernels_same = self.function_kernel_selection(ds_train=ds_train_same, ds_val=ds_val_same)
+            estimator_same = [
+                (MMD.from_trained_parameters(k_obj.trained_mmd_parameter, self.device_obj), k_obj.test_power)
+                for k_obj in kernels_same]
+            if self.kernels_no_optimization is not None:
+                estimator_same += [(MMD(k_obj), None) for k_obj in self.kernels_no_optimization]
+            # end if
+            tests_same = self.function_evaluation_all_kernels(x=x_eval, y=y_eval_same,
+                                                              mmd_estimators=estimator_same,
+                                                              code_approach=code_approach,
+                                                              is_same_distribution=True)
+            test_result += tests_same
+        # end if
+        if y_train_diff is not None:
+            assert y_eval_diff is not None
+            ds_train_diff, ds_val_diff = self.function_separation(x=x_train, y=y_train_diff)
+            kernels_diff = self.function_kernel_selection(ds_train=ds_train_diff, ds_val=ds_val_diff)
+            estimator_diff = [
+                (MMD.from_trained_parameters(k_obj.trained_mmd_parameter, self.device_obj), k_obj.test_power)
+                for k_obj in kernels_diff]
+            if self.kernels_no_optimization is not None:
+                estimator_diff += [(MMD(k_obj), None) for k_obj in self.kernels_no_optimization]
+            # end if
+            tests_diff = self.function_evaluation_all_kernels(x=x_eval, y=y_eval_diff,
+                                                              mmd_estimators=estimator_diff,
+                                                              code_approach=code_approach,
+                                                              is_same_distribution=False)
+            test_result += tests_diff
         # end if
 
-        tests_same = self.function_evaluation_all_kernels(x=x, y=y_same, mmd_estimators=estimator_same,
-                                                          code_approach=code_approach,
-                                                          is_same_distribution=True)
-        tests_diff = self.function_evaluation_all_kernels(x=x, y=y_diff, mmd_estimators=estimator_same,
-                                                          code_approach=code_approach,
-                                                          is_same_distribution=False)
+        return test_result
 
-        return tests_same + tests_diff

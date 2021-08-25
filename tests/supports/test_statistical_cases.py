@@ -48,14 +48,17 @@ def test_evaluate_stats_tests():
         num_epochs=10,
         n_permutation_test=100
     )
-    evals_1 = test_eval.interface(code_approach='test-1', x=x, y_same=y_same, y_diff=y_diff)
-    evals_2 = test_eval.interface(code_approach='test-2', x=x, y_same=y_same, y_diff=y_diff)
+    evals_1 = test_eval.interface(code_approach='test-1', x_train=x, x_eval=x,
+                                  y_train_same=y_same, y_eval_same=y_same)
+    evals_2 = test_eval.interface(code_approach='test-1', x_train=x, x_eval=x,
+                                  y_train_diff=y_diff, y_eval_diff=y_diff)
     eval_formatter = TestResultGroupsFormatter(evals_1 + evals_2)
 
     result_text = eval_formatter.format_test_result_summary()
-    print(result_text)
     result_table = eval_formatter.format_result_table()
-    print(tabulate(result_table))
+    result_summary_table = eval_formatter.format_result_summary_table()
+    assert all(result_summary_table['X=Y'] == 'pass')
+    assert all(result_summary_table['X!=Y'] == 'pass')
 
 
 if __name__ == '__main__':
