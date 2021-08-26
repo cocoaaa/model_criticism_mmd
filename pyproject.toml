@@ -22,8 +22,8 @@ numba = "*"
 Cython = "*"
 h5py = "*"
 tabulate = "*"
-lasagne = { url = "https://github.com/Lasagne/Lasagne/archive/master.zip" }
-theano = { url = "https://github.com/Theano/Theano/archive/master.zip" }
+# lasagne = { url = "https://github.com/Lasagne/Lasagne/archive/master.zip" }
+# theano = { url = "https://github.com/Theano/Theano/archive/master.zip" }
 # shogun = { version = "*", optional = true }
 
 tqdm = "^4.61.2"
@@ -38,7 +38,3 @@ pytest-parallel = "*"
 [build-system]
 requires = ["setuptools", "poetry", "poetry_core>=1.0", "cython"]
 build-backend = "poetry.core.masonry.api"
-
-[tool.poetry.extras]
-full = ["lasagne", "theano"]
-

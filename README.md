@@ -33,7 +33,9 @@ You have a Python environment with Python3.6.
 Then,
 
 ```
-make full
+pip install https://github.com/Lasagne/Lasagne/archive/master.zip
+pip install https://github.com/Theano/Theano/archive/master.zip
+make install
 ```
 
 
