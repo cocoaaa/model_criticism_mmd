@@ -1,0 +1,40 @@
+[tool.poetry]
+name = "model_criticism_mmd"
+version = "2.3"
+description = "A Model criticism on distributions via MMD"
+authors = ["Kensuke Mitsuzawa <kensuke.mit@gmail.com>"]
+maintainers = ["Kensuke Mitsuzawa <kensuke.mit@gmail.com>"]
+license = "BSD"
+readme = "README.md"
+documentation = "Suppose that you have 2 datasets(set of samples). You would like to know how close 2 datasets are and also how difference they are. The `model_criticism_mmd` computes a discrepancy between 2 datasets."
+
+[tool.poetry.dependencies]
+python = "^3.6.1"
+torch = "*"
+torchvision = "*"
+torchaudio = "*"
+dataclasses = "*"
+nptyping = "^1.4.1"
+numpy = "*"
+gpytorch = "*"
+scikit-learn = "*"
+numba = "*"
+Cython = "*"
+h5py = "*"
+tabulate = "*"
+# lasagne = { url = "https://github.com/Lasagne/Lasagne/archive/master.zip" }
+# theano = { url = "https://github.com/Theano/Theano/archive/master.zip" }
+# shogun = { version = "*", optional = true }
+
+tqdm = "^4.61.2"
+[tool.poetry.dev-dependencies]
+pytest = "^6.2.3"
+pytest-resource-path = "^1.3.0"
+nbmake = "0.5"
+pytest-parallel = "*"
+
+[tool.poetry.scripts]
+
+[build-system]
+requires = ["setuptools", "poetry", "poetry_core>=1.0", "cython"]
+build-backend = "poetry.core.masonry.api"

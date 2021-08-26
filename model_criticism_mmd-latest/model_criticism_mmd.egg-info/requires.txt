@@ -1,0 +1,13 @@
+Cython
+dataclasses
+gpytorch
+h5py
+nptyping<2.0.0,>=1.4.1
+numba
+numpy
+scikit-learn
+tabulate
+torch
+torchaudio
+torchvision
+tqdm<5.0.0,>=4.61.2
