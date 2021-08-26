@@ -3,7 +3,6 @@
 *pyc
 .ipynb_checkpoints
 dist
-model_criticism_mmd-*
 *pickle
 opt/
 experiments_gitignore
