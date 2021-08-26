@@ -33,6 +33,11 @@ def test_evaluate_stats_tests():
     y_same = np.random.normal(0, 1.0, size=(500, 100))
     y_diff = np.random.laplace(0, 1.0, size=(500, 100))
 
+    # evals
+    x_eval = [np.random.normal(0, 1.0, size=(500, 100)) for i in range(0, 3)]
+    y_same_eval = [np.random.normal(0, 1.0, size=(500, 100)) for i in range(0, 3)]
+    y_diff_eval = [np.random.laplace(0, 1.0, size=(500, 100)) for i in range(0, 3)]
+
     initial_scales = torch.tensor([1.0] * x.shape[-1])
 
     kernels_opt = [
@@ -45,20 +50,18 @@ def test_evaluate_stats_tests():
     test_eval = StatsTestEvaluator(
         candidate_kernels=kernels_opt,
         kernels_no_optimization=kernels_non_opt,
-        num_epochs=10,
+        num_epochs=5,
         n_permutation_test=100
     )
-    evals_1 = test_eval.interface(code_approach='test-1', x_train=x, x_eval=x,
-                                  y_train_same=y_same, y_eval_same=y_same)
-    evals_2 = test_eval.interface(code_approach='test-1', x_train=x, x_eval=x,
-                                  y_train_diff=y_diff, y_eval_diff=y_diff)
+    evals_1 = test_eval.interface(code_approach='test-1', x_train=x, seq_x_eval=x_eval,
+                                  y_train_same=y_same, seq_y_eval_same=y_same_eval)
+    evals_2 = test_eval.interface(code_approach='test-1', x_train=x, seq_x_eval=x_eval,
+                                  y_train_diff=y_diff, seq_y_eval_diff=y_diff_eval)
     eval_formatter = TestResultGroupsFormatter(evals_1 + evals_2)
 
-    result_text = eval_formatter.format_test_result_summary()
     result_table = eval_formatter.format_result_table()
     result_summary_table = eval_formatter.format_result_summary_table()
-    assert all(result_summary_table['X=Y'] == 'pass')
-    assert all(result_summary_table['X!=Y'] == 'pass')
+    assert len(result_summary_table) == 2
 
 
 if __name__ == '__main__':
