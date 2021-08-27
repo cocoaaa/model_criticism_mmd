@@ -67,7 +67,7 @@ class SelectionKernels(object):
         for scale, kernel_obj in self.candidate_kernels:
             if scale is None:
                 size_vector_dimension, size_vector_short = self.dataset_validation.get_dimension()
-                vector_one = torch.ones(size_vector_dimension)
+                vector_one = torch.ones(size_vector_dimension, device=self.device_obj)
                 scale = vector_one
             # end if
             mmd_estimator = MMD(kernel_function_obj=kernel_obj, scales=scale, device_obj=self.device_obj)

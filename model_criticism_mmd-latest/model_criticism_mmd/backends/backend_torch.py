@@ -32,7 +32,7 @@ class MMD(object):
         self.kernel_function_obj = kernel_function_obj
         self.device_obj = device_obj
         self.min_var_est = torch.tensor([1e-8], dtype=torch.float64, device=device_obj)
-        self.scales = scales
+        self.scales = scales.to(self.device_obj)
         self.biased = biased
 
     @classmethod
