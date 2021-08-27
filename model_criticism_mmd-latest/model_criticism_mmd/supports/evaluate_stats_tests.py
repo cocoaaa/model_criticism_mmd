@@ -15,7 +15,6 @@ from model_criticism_mmd.backends import kernels_torch
 from model_criticism_mmd.models import DEFAULT_DEVICE
 from model_criticism_mmd.logger_unit import logger
 
-from tabulate import tabulate
 
 @dataclass
 class TestResult(object):
@@ -34,40 +33,6 @@ class TestResult(object):
 class TestResultGroupsFormatter(object):
     test_result: typing.List[TestResult]
 
-    def format_test_result_summary(self) -> str:
-        result_text = ''
-
-        for k, g_obj in itertools.groupby(sorted(self.test_result, key=lambda o: (o.codename_experiment, o.kernel)),
-                                           key=lambda o: (o.codename_experiment, o.kernel)):
-            for test_result in g_obj:
-                title_table = f'exp-code={test_result.codename_experiment}, Kernel={test_result.kernel} ' \
-                              f'with length_scale={test_result.kernel_parameter} optimization={test_result.is_optimized}\n' \
-                              f'p-value={test_result.p_value}'
-
-                result_table = [[False, False], [False, False]]
-                if test_result.is_same_distribution_test and test_result.is_same_distribution_truth:
-                    result_table[0][0] = True
-                elif test_result.is_same_distribution_truth and test_result.is_same_distribution_test is False:
-                    result_table[0][1] = True
-                elif test_result.is_same_distribution_truth is False and test_result.is_same_distribution_test is True:
-                    result_table[1][0] = True
-                elif test_result.is_same_distribution_truth is False and test_result.is_same_distribution_test is False:
-                    result_table[1][1] = True
-                else:
-                    raise NotImplementedError('undefined')
-                # end if
-
-                df_out = pandas.DataFrame(result_table, index=[True, False], columns=[True, False])
-                df_out.index.name = 'Truth / Test'
-
-                result_text += title_table
-                result_text += '\n'
-                result_text += tabulate(df_out, headers='keys', tablefmt='psql')
-                result_text += '\n\n'
-            # end for
-        # end for
-        return result_text
-
     @staticmethod
     def function_test_result_type(record: typing.Union[pandas.DataFrame, typing.Dict]) -> str:
         if record['is_same_distribution_truth'] and record['is_same_distribution_test']:
@@ -75,9 +40,9 @@ class TestResultGroupsFormatter(object):
         elif record['is_same_distribution_truth'] is False and record['is_same_distribution_test'] is False:
             return 'pass'
         elif record['is_same_distribution_truth'] is True and record['is_same_distribution_test'] is False:
-            return 'error type-1'
+            return 'error_type-1'
         elif record['is_same_distribution_truth'] is False and record['is_same_distribution_test'] is True:
-            return 'error type-2'
+            return 'error_type-2'
         else:
             raise NotImplementedError('undefined')
 
@@ -103,29 +68,49 @@ class TestResultGroupsFormatter(object):
 
         Returns: DataFrame
         """
-        records = [self.asdict(r) for r in self.test_result]
         summary_record = []
         for t_key, records in itertools.groupby(
                 sorted(self.test_result, key=lambda r: (r.codename_experiment, r.kernel, r.is_optimized)),
-                key=lambda r: (r.codename_experiment, r.kernel, r.is_optimized)):
+                key=lambda rr: (rr.codename_experiment, rr.kernel, rr.is_optimized)):
+            seq_records = list(records)
             new_record = {
                 'test-key': f'{t_key[0]}-{t_key[1]}-{t_key[2]}',
-                'X=Y': None,
-                'X!=Y': None
+                'X=Y_total': 0,
+                'X=Y_pass': 0,
+                'X=Y_error-1': 0,
+                'X=Y_error-2': 0,
+                'X!=Y_total': 0,
+                'X!=Y_pass': 0,
+                'X!=Y_error-1': 0,
+                'X=!Y_error-2': 0,
+                'kernel': seq_records[0].kernel,
+                'length_scale': seq_records[0].kernel_parameter,
+                'is_optimization': seq_records[0].is_optimized
             }
-            for r in records:
+            for r in seq_records:
+                class_test_result = self.function_test_result_type(self.asdict(r))
                 if r.is_same_distribution_truth:
-                    # X=Y
-                    if r.is_same_distribution_test is True:
-                        new_record['X=Y'] = 'pass'
+                    new_record['X=Y_total'] += 1
+                    if class_test_result == 'pass':
+                        new_record['X=Y_pass'] += 1
+                    elif class_test_result == 'error_type-1':
+                        new_record['X=Y_error-1'] += 1
+                    elif class_test_result == 'error_type-2':
+                        new_record['X=Y_error-2'] += 1
                     else:
-                        new_record['X=Y'] = 'error type-1'
+                        raise NotImplementedError()
+                    # end if
                 else:
-                    # X!=Y
-                    if r.is_same_distribution_test is False:
-                        new_record['X!=Y'] = 'pass'
+                    new_record['X!=Y_total'] += 1
+                    if class_test_result == 'pass':
+                        new_record['X!=Y_pass'] += 1
+                    elif class_test_result == 'error_type-1':
+                        new_record['X!=Y_error-1'] += 1
+                    elif class_test_result == 'error_type-2':
+                        new_record['X!=Y_error-2'] += 1
                     else:
-                        new_record['X!=Y'] = 'error type-2'
+                        raise NotImplementedError()
+                    # end if
                 # end if
             # end for
             summary_record.append(new_record)
@@ -268,22 +253,22 @@ class StatsTestEvaluator(object):
     def interface(self,
                   code_approach: str,
                   x_train: typing.Union[torch.Tensor, np.ndarray],
-                  x_eval: typing.Union[torch.Tensor, np.ndarray],
+                  seq_x_eval: typing.List[typing.Union[torch.Tensor, np.ndarray]],
                   y_train_same: typing.Optional[typing.Union[torch.Tensor, np.ndarray]] = None,
                   y_train_diff: typing.Optional[typing.Union[torch.Tensor, np.ndarray]] = None,
-                  y_eval_same: typing.Optional[typing.Union[torch.Tensor, np.ndarray]] = None,
-                  y_eval_diff: typing.Optional[typing.Union[torch.Tensor, np.ndarray]] = None
+                  seq_y_eval_same: typing.Optional[typing.List[typing.Union[torch.Tensor, np.ndarray]]] = None,
+                  seq_y_eval_diff: typing.Optional[typing.List[typing.Union[torch.Tensor, np.ndarray]]] = None
                   ) -> typing.List[TestResult]:
         """Run permutation tests for cases where X=Y and X!=Y.
 
         Args:
             code_approach:
             x_train: X data for training.
-            x_eval: X data for evaluation.
+            seq_x_eval: List of X data for evaluation.
             y_train_same: Y data for training. Y is from the same distribution.
             y_train_diff: Y data for training. Y is from the different distribution.
-            y_eval_same: omit
-            y_eval_diff: omit
+            seq_y_eval_same: List of Y-same data for evaluation.
+            seq_y_eval_diff: List of Y-diff for evaluation.
 
         Returns: [TestResult]
         """
@@ -293,7 +278,10 @@ class StatsTestEvaluator(object):
             raise Exception('Either of y_train_same or y_train_diff should be given.')
 
         if y_train_same is not None:
-            assert y_eval_same is not None
+            assert seq_y_eval_same is not None
+            assert len(seq_x_eval) == len(seq_y_eval_same), f'different length of eval-data. ' \
+                                                            f'len(seq_x_eval): {len(seq_x_eval)} ' \
+                                                            f'len(seq_y_eval_same): {len(seq_y_eval_same)}'
             ds_train_same, ds_val_same = self.function_separation(x=x_train, y=y_train_same)
             kernels_same = self.function_kernel_selection(ds_train=ds_train_same, ds_val=ds_val_same)
             estimator_same = [
@@ -302,14 +290,22 @@ class StatsTestEvaluator(object):
             if self.kernels_no_optimization is not None:
                 estimator_same += [(MMD(k_obj), None) for k_obj in self.kernels_no_optimization]
             # end if
-            tests_same = self.function_evaluation_all_kernels(x=x_eval, y=y_eval_same,
-                                                              mmd_estimators=estimator_same,
-                                                              code_approach=code_approach,
-                                                              is_same_distribution=True)
-            test_result += tests_same
+            i = 0
+            for x_eval, y_eval_same in zip(seq_x_eval, seq_y_eval_same):
+                i += 1
+                logger.info(f'Running X=Y {i} of {len(seq_x_eval)}')
+                tests_same = self.function_evaluation_all_kernels(x=x_eval, y=y_eval_same,
+                                                                  mmd_estimators=estimator_same,
+                                                                  code_approach=code_approach,
+                                                                  is_same_distribution=True)
+                test_result += tests_same
+            # end for
         # end if
         if y_train_diff is not None:
-            assert y_eval_diff is not None
+            assert seq_y_eval_diff is not None
+            assert len(seq_x_eval) == len(seq_y_eval_diff), f'different length of eval-data. ' \
+                                                            f'len(seq_x_eval): {len(seq_x_eval)} ' \
+                                                            f'len(seq_y_eval_diff): {len(seq_y_eval_diff)}'
             ds_train_diff, ds_val_diff = self.function_separation(x=x_train, y=y_train_diff)
             kernels_diff = self.function_kernel_selection(ds_train=ds_train_diff, ds_val=ds_val_diff)
             estimator_diff = [
@@ -318,11 +314,16 @@ class StatsTestEvaluator(object):
             if self.kernels_no_optimization is not None:
                 estimator_diff += [(MMD(k_obj), None) for k_obj in self.kernels_no_optimization]
             # end if
-            tests_diff = self.function_evaluation_all_kernels(x=x_eval, y=y_eval_diff,
-                                                              mmd_estimators=estimator_diff,
-                                                              code_approach=code_approach,
-                                                              is_same_distribution=False)
-            test_result += tests_diff
+            i = 0
+            for x_eval, y_eval_diff in zip(seq_x_eval, seq_y_eval_diff):
+                i += 1
+                logger.info(f'Running X!=Y {i} of {len(seq_x_eval)}')
+                tests_diff = self.function_evaluation_all_kernels(x=x_eval, y=y_eval_diff,
+                                                                  mmd_estimators=estimator_diff,
+                                                                  code_approach=code_approach,
+                                                                  is_same_distribution=False)
+                test_result += tests_diff
+            # end for
         # end if
 
         return test_result
