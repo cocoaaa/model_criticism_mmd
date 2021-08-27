@@ -56,6 +56,8 @@ See jupyter notebooks. Notes are in `samples/`
 
 ```
 make test
+# if GPU machine
+# make test-gpu
 ```
 
 # License
@@ -65,11 +67,12 @@ The source code is licensed MIT. The website content is licensed CC BY 4.0.
 ```
 @misc{sumo-docker-pipeline,
   author = {Kensuke Mitsuzawa},
-  title = {sumo-docker-pipeline},
+  title = {model-criticism-mmd},
   year = {2021},
   publisher = {GitHub},
   journal = {GitHub repository},
-  howpublished = {\url{https://github.com/Kensuke-Mitsuzawa/sumo_docker_pipeline}},
+  howpublished = {\url{https://github.com/Kensuke-Mitsuzawa/model_criticism_mmd}},
 }
-``
+```
+
 
