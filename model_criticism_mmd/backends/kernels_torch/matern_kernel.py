@@ -30,7 +30,7 @@ class MaternKernelFunction(BaseKernel):
         else:
             self.gpy_kernel = MaternKernel(nu=nu)
         # end if
-        if device_obj == torch.device('cuda'):
+        if 'cuda' in str(self.device_obj.type):
             self.gpy_kernel = self.gpy_kernel.cuda()
         # end if
 

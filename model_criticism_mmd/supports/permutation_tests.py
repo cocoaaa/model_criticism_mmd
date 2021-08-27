@@ -145,7 +145,7 @@ class PermutationTest(object):
             normalized_statistic = self.normalize_statistic(statistics)
             return normalized_statistic.detach().cpu().numpy()
         else:
-            return statistics.detach().numpy()
+            return statistics.detach().cpu().numpy()
 
     def compute_p_value(self, statistic: np.ndarray) -> float:
         """Compute p-value based on the permutation tests.
