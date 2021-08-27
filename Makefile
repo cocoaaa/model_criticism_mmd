@@ -10,3 +10,6 @@ install:
 test:
 	pytest --workers 4 tests/
 	pytest --nbmake --ignore samples/study-parameter-stability.ipynb samples/
+test_gpu:
+	pytest tests/
+	pytest --nbmake --ignore samples/study-parameter-stability.ipynb samples/

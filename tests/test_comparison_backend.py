@@ -3,6 +3,7 @@ import pathlib
 import torch
 from model_criticism_mmd import ModelTrainerTorchBackend, ModelTrainerTheanoBackend, MMD, kernels_torch
 from model_criticism_mmd.models import TwoSampleDataSet
+from model_criticism_mmd.models.static import DEFAULT_DEVICE
 from collections import namedtuple
 
 OptimizationResult = namedtuple('OptimizationResult', ('x', 'y', 'theano', 'torch'))
@@ -14,7 +15,7 @@ def test_comparison(resource_path_root: pathlib.Path):
     We check if MMD value from both backends are similar values.
     Also, we check the index with high variances == the index with high weight of scales vector.
     """
-    device_obj_torch = torch.device('cpu')
+    device_obj_torch = DEFAULT_DEVICE
 
     size = 100
     n_trial = 3
@@ -41,8 +42,8 @@ def test_comparison(resource_path_root: pathlib.Path):
         x_val = x[80:]
         y_val = y[80:]
 
-        dataset_train = TwoSampleDataSet(x_train, y_train, torch.device('cpu'))
-        dataset_val = TwoSampleDataSet(x_val, y_val, torch.device('cpu'))
+        dataset_train = TwoSampleDataSet(x_train, y_train, DEFAULT_DEVICE)
+        dataset_val = TwoSampleDataSet(x_val, y_val, DEFAULT_DEVICE)
 
         # with sigma optimization
         trainer_theano = ModelTrainerTheanoBackend()

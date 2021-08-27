@@ -23,10 +23,10 @@ def data_processor(resource_path_root: Path
 def test_matern_kernels(resource_path_root: Path):
     """System test of Matern kernel object.
     Test includes a case using the median estimation for lengthscale."""
-    device_obj = torch.device(torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
+    device_obj = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    x_train = torch.normal(mean=0.0, std=1.0, size=(100, 500))
-    y_train = torch.normal(mean=0.0, std=1.0, size=(100, 500))
+    x_train = torch.normal(mean=0.0, std=1.0, size=(100, 500), device=device_obj)
+    y_train = torch.normal(mean=0.0, std=1.0, size=(100, 500), device=device_obj)
 
     for nu_parameter in (0.5, 1.5, 2.5):
         kernel_matern_median = MaternKernelFunction(nu=nu_parameter, device_obj=device_obj)
@@ -57,7 +57,7 @@ def test_matern_kernel_optimization(resource_path_root: Path):
         init_scale = torch.tensor(np.array([0.05, 0.55]))
         estimator = MMD(kernel_function_obj=kernel_matern, scales=init_scale, device_obj=device_obj)
         trainer = ModelTrainerTorchBackend(mmd_estimator=estimator, device_obj=device_obj)
-        res_opt = trainer.train(dataset_training=ds_train, dataset_validation=ds_val, num_epochs=150)
+        res_opt = trainer.train(dataset_training=ds_train, dataset_validation=ds_val, num_epochs=10)
         # check if a lengthscale is over-written automatically
         assert res_opt.kernel_function_obj.lengthscale != length_scale_initial
         # assert res_opt.training_log[-1].avg_obj_train < res_opt.training_log[0].avg_obj_train
@@ -108,7 +108,7 @@ def test_matern_kernel_time_series(resource_path_root: Path):
     y_val = y_data_sample[ind_training:, :]
     dataset_train = TwoSampleDataSet(x_train, y_train, device_obj)
     dataset_val = TwoSampleDataSet(x_val, y_val, device_obj)
-    res_opt = trainer.train(dataset_training=dataset_train, dataset_validation=dataset_val, num_epochs=150)
+    res_opt = trainer.train(dataset_training=dataset_train, dataset_validation=dataset_val, num_epochs=10)
     assert res_opt.training_log[-1].avg_obj_train < res_opt.training_log[0].avg_obj_train
 
     # (n-time-series, n-sample)
@@ -120,11 +120,11 @@ def test_matern_kernel_time_series(resource_path_root: Path):
     y_val = y_data_sample.transpose()[ind_training:, :]
     dataset_train = TwoSampleDataSet(x_train, y_train, device_obj)
     dataset_val = TwoSampleDataSet(x_val, y_val, device_obj)
-    res_opt = trainer.train(dataset_training=dataset_train, dataset_validation=dataset_val, num_epochs=150)
+    res_opt = trainer.train(dataset_training=dataset_train, dataset_validation=dataset_val, num_epochs=10)
     assert res_opt.training_log[-1].avg_obj_train < res_opt.training_log[0].avg_obj_train
 
 
 if __name__ == '__main__':
-    #test_matern_kernels(Path('../../resources'))
+    test_matern_kernels(Path('../../resources'))
     test_matern_kernel_time_series(Path('../../resources'))
-    #test_matern_kernel_optimization(Path('../../resources'))
+    test_matern_kernel_optimization(Path('../../resources'))

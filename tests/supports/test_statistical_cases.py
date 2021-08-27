@@ -26,6 +26,7 @@ from tabulate import tabulate
 
 from model_criticism_mmd.supports import StatsTestEvaluator, TestResultGroupsFormatter
 from model_criticism_mmd import kernels_torch
+from model_criticism_mmd.models.static import DEFAULT_DEVICE
 
 
 def test_evaluate_stats_tests():
@@ -51,7 +52,8 @@ def test_evaluate_stats_tests():
         candidate_kernels=kernels_opt,
         kernels_no_optimization=kernels_non_opt,
         num_epochs=5,
-        n_permutation_test=100
+        n_permutation_test=100,
+        device_obj=DEFAULT_DEVICE
     )
     evals_1 = test_eval.interface(code_approach='test-1', x_train=x, seq_x_eval=x_eval,
                                   y_train_same=y_same, seq_y_eval_same=y_same_eval)
