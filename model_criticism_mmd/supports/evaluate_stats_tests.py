@@ -228,10 +228,10 @@ class StatsTestEvaluator(object):
             __test_operator, __p = self.function_permutation_test(estimator_obj, x, y)
 
             if isinstance(estimator_obj.kernel_function_obj, kernels_torch.MaternKernelFunction):
-                kernel_param = estimator_obj.kernel_function_obj.gpy_kernel.lengthscale
+                kernel_param = estimator_obj.kernel_function_obj.gpy_kernel.lengthscale.detach().cpu().numpy()
                 name_kernel = f'{estimator_obj.kernel_function_obj.__class__.__name__}-nu={estimator_obj.kernel_function_obj.nu}'
             elif isinstance(estimator_obj.kernel_function_obj, kernels_torch.BasicRBFKernelFunction):
-                kernel_param = estimator_obj.kernel_function_obj.log_sigma.detach().numpy()
+                kernel_param = estimator_obj.kernel_function_obj.log_sigma.detach().cpu().numpy()
                 name_kernel = f'{estimator_obj.kernel_function_obj.__class__.__name__}'
             else:
                 kernel_param = math.nan

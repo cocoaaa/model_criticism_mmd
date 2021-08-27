@@ -42,8 +42,8 @@ def test_comparison(resource_path_root: pathlib.Path):
         x_val = x[80:]
         y_val = y[80:]
 
-        dataset_train = TwoSampleDataSet(x_train, y_train, torch.device('cpu'))
-        dataset_val = TwoSampleDataSet(x_val, y_val, torch.device('cpu'))
+        dataset_train = TwoSampleDataSet(x_train, y_train, DEFAULT_DEVICE)
+        dataset_val = TwoSampleDataSet(x_val, y_val, DEFAULT_DEVICE)
 
         # with sigma optimization
         trainer_theano = ModelTrainerTheanoBackend()

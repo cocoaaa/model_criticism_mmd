@@ -28,6 +28,10 @@ class TwoSampleDataSet(torch.utils.data.Dataset):
         assert isinstance(y, (torch.Tensor, np.ndarray))
         self.x = x if isinstance(x, torch.Tensor) else torch.tensor(x, device=device_obj)
         self.y = y if isinstance(y, torch.Tensor) else torch.tensor(y, device=device_obj)
+        if 'cuda' in device_obj.type:
+            self.x = self.x.to(device_obj)
+            self.y = self.y.to(device_obj)
+        # end if
         self.length_x = len(x)
         self.length_y = len(y)
         self.value_padding = value_padding
@@ -131,8 +135,8 @@ class TwoSampleIterDataSet(torch.utils.data.IterableDataset):
         logger.info(f'Saving data into {path_destination}')
         f = h5py.File(path_destination, 'w', rdcc_nbytes=1024 ** 2 * 4000, rdcc_nslots=1e7)
         group = f.create_group("data")
-        group.create_dataset("x", data=x, chunks=True)
-        group.create_dataset("y", data=y, chunks=True)
+        group.create_dataset("x", data=x.cpu(), chunks=True)
+        group.create_dataset("y", data=y.cpu(), chunks=True)
         return path_destination
 
     @staticmethod

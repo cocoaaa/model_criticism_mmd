@@ -8,7 +8,7 @@ from model_criticism_mmd.supports.distribution_generator import generate_data
 
 
 def test_devel(resource_path_root: pathlib.Path):
-    num_epochs = 500
+    num_epochs = 100
     path_trained_model = './save_test.npz'
 
     np.random.seed(np.random.randint(2**31))
