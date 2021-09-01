@@ -82,7 +82,7 @@ class TestResultGroupsFormatter(object):
                 'X!=Y_total': 0,
                 'X!=Y_pass': 0,
                 'X!=Y_error-1': 0,
-                'X=!Y_error-2': 0,
+                'X!=Y_error-2': 0,
                 'kernel': seq_records[0].kernel,
                 'length_scale': seq_records[0].kernel_parameter,
                 'is_optimization': seq_records[0].is_optimized

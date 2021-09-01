@@ -40,7 +40,7 @@ class TwoSampleDataSet(torch.utils.data.Dataset):
             logger.warning(f'x and y has different sample size. '
                            f'I do not guarantee correct behaviors of training-process.')
         else:
-            logger.debug(f'input data N(sample-size)={x.shape[0]}, N(dimension)={y.shape[1]}')
+            logger.debug(f'input data N(sample-size)={x.shape[0]}, N(dimension)={y.shape[0]}')
         # end if
 
         if x.shape[-1] == y.shape[-1]:
