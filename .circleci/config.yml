@@ -27,7 +27,7 @@ jobs:
           command: pip install poetry && pip install pytest pytest-resource-path pytest-parallel nbmake
       - run:
           name: install required packages
-          command: make build
+          command: make build && make install
       - run:
           name: Run tests
           command: make test
