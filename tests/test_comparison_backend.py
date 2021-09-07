@@ -130,8 +130,8 @@ def test_comparison(resource_path_root: pathlib.Path):
 
         assert int(numpy.argmax(set_without_sigma_out.torch.scales)) == dim_most_diff_variance, \
             f'{int(numpy.argmax(set_without_sigma_out.theano.scales))} != {dim_most_diff_variance}'
-        assert int(numpy.argmax(set_without_sigma_out.torch.scales)) == dim_most_diff_variance, \
-            f'{int(numpy.argmax(set_without_sigma_out.theano.scales))} != {dim_most_diff_variance}'
+        # assert int(numpy.argmax(set_without_sigma_out.torch.scales)) == dim_most_diff_variance, \
+        #     f'{int(numpy.argmax(set_without_sigma_out.theano.scales))} != {dim_most_diff_variance}'
 
 
 if __name__ == '__main__':

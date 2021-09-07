@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: model-criticism-mmd
-Version: 2.3.2
+Version: 2.4
 Summary: A Model criticism on distributions via MMD
 License: BSD
 Author: Kensuke Mitsuzawa
@@ -20,6 +20,7 @@ Requires-Dist: h5py
 Requires-Dist: nptyping (>=1.4.1,<2.0.0)
 Requires-Dist: numba
 Requires-Dist: numpy
+Requires-Dist: pandas
 Requires-Dist: scikit-learn
 Requires-Dist: tabulate
 Requires-Dist: torch
