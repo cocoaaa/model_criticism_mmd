@@ -24,7 +24,7 @@ jobs:
           command: pyenv global miniconda3-4.7.12
       - run:
           name: install package dependencies
-          command: pip install poetry && make install && pip install pytest pytest-resource-path
+          command: pip install poetry && make install && pip install pytest pytest-resource-path pytest-parallel nbmake
       - run:
           name: Run tests
           command: make test
