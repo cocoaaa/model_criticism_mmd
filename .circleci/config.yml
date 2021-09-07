@@ -24,7 +24,7 @@ jobs:
           command: pyenv global miniconda3-4.7.12
       - run:
           name: install pre-required package dependencies
-          command: pip install poetry && pip install pytest pytest-resource-path pytest-parallel nbmake
+          command: pip install poetry && pip install pytest pytest-resource-path pytest-parallel nbmake && pip install matplotlib
       - run:
           name: install theano and lasagne
           command: pip install --upgrade https://github.com/Theano/Theano/archive/master.zip && pip install --upgrade https://github.com/Lasagne/Lasagne/archive/master.zip
