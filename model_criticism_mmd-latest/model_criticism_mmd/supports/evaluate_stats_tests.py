@@ -27,6 +27,8 @@ class TestResult(object):
     ratio: float
     p_value: float
     scales: torch.Tensor
+    distributions_permutation_test: torch.Tensor
+    statistics_whole: float
 
 
 @dataclass
@@ -34,7 +36,7 @@ class TestResultGroupsFormatter(object):
     test_result: typing.List[TestResult]
 
     @staticmethod
-    def function_test_result_type(record: typing.Union[pandas.DataFrame, typing.Dict]) -> str:
+    def __function_test_result_type(record: typing.Union[pandas.DataFrame, typing.Dict]) -> str:
         if record['is_same_distribution_truth'] and record['is_same_distribution_test']:
             return 'pass'
         elif record['is_same_distribution_truth'] is False and record['is_same_distribution_test'] is False:
@@ -56,7 +58,7 @@ class TestResultGroupsFormatter(object):
         records = [self.asdict(r) for r in self.test_result]
 
         df_res = pandas.DataFrame(records)
-        df_res['test_result'] = df_res.apply(self.function_test_result_type, axis=1)
+        df_res['test_result'] = df_res.apply(self.__function_test_result_type, axis=1)
         df_output = df_res.reindex(columns=['codename_experiment', 'kernel', 'kernel_parameter', 'is_optimized',
                                             'test_result', 'p_value', 'is_same_distribution_truth',
                                             'is_same_distribution_test', 'ratio'])
@@ -88,7 +90,7 @@ class TestResultGroupsFormatter(object):
                 'is_optimization': seq_records[0].is_optimized
             }
             for r in seq_records:
-                class_test_result = self.function_test_result_type(self.asdict(r))
+                class_test_result = self.__function_test_result_type(self.asdict(r))
                 if r.is_same_distribution_truth:
                     new_record['X=Y_total'] += 1
                     if class_test_result == 'pass':
@@ -121,7 +123,7 @@ class TestResultGroupsFormatter(object):
 
 class StatsTestEvaluator(object):
     def __init__(self,
-                 candidate_kernels: typing.List[typing.Tuple[torch.Tensor, kernels_torch.BaseKernel]],
+                 candidate_kernels: typing.List[typing.Tuple[typing.Optional[torch.Tensor], kernels_torch.BaseKernel]],
                  device_obj: torch.device = DEFAULT_DEVICE,
                  num_epochs: int = 500,
                  n_permutation_test: int = 500,
@@ -194,7 +196,7 @@ class StatsTestEvaluator(object):
         return selection_result
 
     def function_permutation_test(self, mmd_estimator: MMD, x: torch.Tensor, y: torch.Tensor
-                                  ) -> typing.Tuple[PermutationTest, float]:
+                                  ) -> typing.Tuple[PermutationTest, float, float]:
         """Runs permutation test."""
         dataset_for_permutation_test_data_sample = TwoSampleDataSet(x, y, self.device_obj)
         test_operator = PermutationTest(n_permutation_test=self.n_permutation_test,
@@ -203,7 +205,12 @@ class StatsTestEvaluator(object):
                                                     device_obj=self.device_obj)
         mmd_data_sample = test_operator.compute_statistic()
         p_value = test_operator.compute_p_value(mmd_data_sample)
-        return test_operator, p_value
+        if isinstance(p_value, torch.Tensor):
+            p_value = p_value.detach().cpu().numpy()
+        # end
+        if isinstance(mmd_data_sample, torch.Tensor):
+            mmd_data_sample = mmd_data_sample.detach().cpu().numpy()
+        return test_operator, p_value, mmd_data_sample
 
     def function_evaluation_all_kernels(self,
                                         x: torch.Tensor,
@@ -225,8 +232,11 @@ class StatsTestEvaluator(object):
         """
         results = []
         for estimator_obj, ratio in mmd_estimators:
-            __test_operator, __p = self.function_permutation_test(estimator_obj, x, y)
-
+            __test_operator, __p, __mmd_whole = self.function_permutation_test(estimator_obj, x, y)
+            distributions_test = __test_operator.stats_permutation_test
+            if isinstance(distributions_test, torch.Tensor):
+                distributions_test = distributions_test.detach().cpu().numpy()
+            # end
             if isinstance(estimator_obj.kernel_function_obj, kernels_torch.MaternKernelFunction):
                 kernel_param = estimator_obj.kernel_function_obj.gpy_kernel.lengthscale.detach().cpu().numpy()
                 name_kernel = f'{estimator_obj.kernel_function_obj.__class__.__name__}-nu={estimator_obj.kernel_function_obj.nu}'
@@ -238,6 +248,12 @@ class StatsTestEvaluator(object):
                 name_kernel = 'undefined'
             # end if
             is_same_test = self.func_evaluation(__p)
+            if isinstance(estimator_obj.scales, torch.Tensor):
+                scales = estimator_obj.scales.detach().cpu().numpy()
+            else:
+                scales = estimator_obj.scales
+            # end
+
             results.append(TestResult(codename_experiment=code_approach,
                                       kernel_parameter=kernel_param,
                                       kernel=name_kernel,
@@ -246,7 +262,9 @@ class StatsTestEvaluator(object):
                                       is_optimized=False if ratio is None else True,
                                       ratio=ratio,
                                       p_value=__p,
-                                      scales=estimator_obj.scales))
+                                      scales=scales,
+                                      distributions_permutation_test=distributions_test,
+                                      statistics_whole=__mmd_whole))
         # end for
         return results
 
