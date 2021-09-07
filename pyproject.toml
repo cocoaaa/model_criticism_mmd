@@ -22,6 +22,8 @@ numba = "*"
 Cython = "*"
 h5py = "*"
 tabulate = "*"
+pandas = "*"
+
 # lasagne = { url = "https://github.com/Lasagne/Lasagne/archive/master.zip" }
 # theano = { url = "https://github.com/Theano/Theano/archive/master.zip" }
 # shogun = { version = "*", optional = true }
