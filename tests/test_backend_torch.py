@@ -52,6 +52,29 @@ def test_auto_stop(resource_path_root: Path):
     logger.info(trained_obj.scales)
 
 
+def test_l1_regularization(resource_path_root: Path):
+    """Putting L1 regularization for objective value."""
+    num_epochs = 100
+    x_train, y_train, x_test, y_test = data_processor(resource_path_root)
+    init_scale = torch.tensor(np.array([0.05, 0.55]))
+    dataset_train = TwoSampleDataSet(x_train, y_train)
+    dataset_val = TwoSampleDataSet(x_test, y_test)
+    kernel_function = BasicRBFKernelFunction(log_sigma=0.0)
+    trainer = ModelTrainerTorchBackend(MMD(kernel_function_obj=kernel_function))
+    trained_obj = trainer.train(dataset_training=dataset_train,
+                                dataset_validation=dataset_val,
+                                num_epochs=num_epochs,
+                                initial_scale=init_scale,
+                                reg_strategy='l1',
+                                reg_lambda=1.0)
+    mmd_value_trained = trainer.mmd_distance(x_test, y_test, is_detach=True)
+    model_from_param = ModelTrainerTorchBackend.model_from_trained(trained_obj)
+    mmd_value_from_params = model_from_param.mmd_distance(x_test, y_test, is_detach=True)
+    assert (mmd_value_trained.mmd - mmd_value_from_params.mmd) < 0.01, \
+        f"{mmd_value_trained.mmd}, {mmd_value_from_params.mmd}"
+    logger.info(trained_obj.scales)
+
+
 def test_non_negative_scales(resource_path_root: Path):
     num_epochs = 100
     path_trained_model = './trained_mmd_non_negative.pickle'
@@ -143,3 +166,4 @@ if __name__ == "__main__":
     test_auto_stop(pathlib.Path('./resources'))
     test_non_negative_scales(pathlib.Path('./resources'))
     test_multi_workers(pathlib.Path('./resources'))
+    test_l1_regularization(pathlib.Path('./resources'))
