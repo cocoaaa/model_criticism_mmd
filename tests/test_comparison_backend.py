@@ -59,7 +59,7 @@ def test_comparison(resource_path_root: pathlib.Path):
                                                   init_log_sigma=initial_sigma,
                                                   opt_log=True)
 
-        mmd_estimator_sigma_opt = MMD(kernels_torch.BasicRBFKernelFunction(opt_sigma=True,
+        mmd_estimator_sigma_opt = MMD(kernels_torch.BasicRBFKernelFunction(opt_sigma=False,
                                                                            device_obj=device_obj_torch,
                                                                            log_sigma=initial_sigma),
                                       device_obj=device_obj_torch,

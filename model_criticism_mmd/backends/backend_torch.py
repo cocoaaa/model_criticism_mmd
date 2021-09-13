@@ -259,13 +259,15 @@ class ModelTrainerTorchBackend(TrainerBase):
 
     def run_validation(self,
                        dataset_validation: TwoSampleDataSet,
-                       reg: torch.Tensor,
                        batchsize: int,
                        num_workers: int,
                        is_shuffle: bool = False,
                        is_validation_all: bool = False,
                        is_first_iter: bool = False,
-                       is_gc: bool = False
+                       is_gc: bool = False,
+                       reg: torch.Tensor = None,
+                       reg_strategy: str = None,
+                       reg_lambda: float = 0.01
                        ) -> typing.Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """A procedure for validations
         """
@@ -328,12 +330,13 @@ class ModelTrainerTorchBackend(TrainerBase):
                         optimizer: torch.optim.SGD,
                         dataset: TwoSampleDataSet,
                         batchsize: int,
-                        reg: torch.Tensor,
                         num_workers: int = 1,
                         is_scales_non_negative: bool = False,
                         is_shuffle: bool = False,
-                        is_gc: bool = False
-                        ) -> typing.Tuple[torch.Tensor, torch.Tensor]:
+                        is_gc: bool = False,
+                        reg: torch.Tensor = None,
+                        reg_strategy: str = None,
+                        reg_lambda: float = 0.01) -> typing.Tuple[torch.Tensor, torch.Tensor]:
         total_mmd2 = 0
         total_obj = 0
         n_batches = 0
@@ -346,7 +349,9 @@ class ModelTrainerTorchBackend(TrainerBase):
         # end if
         for xbatch, ybatch in data_loader:
             optimizer.zero_grad()
-            mmd2_pq, stat, obj = self.forward(xbatch, ybatch, reg=reg)
+            # NOTE: we have to generate regularization term in every batch. If we don't, auto-grad doesn't work.
+            reg_term = self.generate_regularization_term(reg=reg, reg_strategy=reg_strategy, reg_lambda=reg_lambda)
+            mmd2_pq, stat, obj = self.forward(xbatch, ybatch, reg=reg_term)
             # end if
             assert np.isfinite(mmd2_pq.detach().cpu().numpy())
             assert np.isfinite(obj.detach().cpu().numpy())
@@ -392,6 +397,7 @@ class ModelTrainerTorchBackend(TrainerBase):
             input_q: data
             reg: a term for regularization
             opt_log: a flag to control heuristic lower bound for the objective value.
+            reg:
             is_validation:
         Returns:
             tuple: mmd2_pq, stat, obj
@@ -422,6 +428,19 @@ class ModelTrainerTorchBackend(TrainerBase):
                            0.0))
         # end if
 
+    # todo double check
+    def generate_regularization_term(self, reg: typing.Optional[torch.Tensor],
+                                     reg_strategy: str, reg_lambda: float) -> torch.Tensor:
+        if reg_strategy == 'l1':
+            __reg = reg_lambda * torch.sum(torch.abs(self.scales))
+            logger.debug(f'Using L1 regularization. Now L1 = {__reg}')
+        elif reg is None:
+            __reg = torch.tensor([0.0], requires_grad=True, device=self.device_obj)
+        else:
+            __reg = reg
+
+        return __reg
+
     def train(self,
               dataset_training: TwoSampleDataSet,
               dataset_validation: TwoSampleDataSet,
@@ -440,7 +459,9 @@ class ModelTrainerTorchBackend(TrainerBase):
               is_shuffle: bool = False,
               is_validation_all: bool = False,
               is_length_scale_median: bool = True,
-              is_gc: bool = False) -> TrainedMmdParameters:
+              is_gc: bool = False,
+              reg_strategy: str = None,
+              reg_lambda: float = 0.01) -> TrainedMmdParameters:
         """Training (Optimization) of MMD parameters.
 
         Args:
@@ -449,6 +470,8 @@ class ModelTrainerTorchBackend(TrainerBase):
             batchsize: batch size
             ratio_train: a ratio of division for training
             reg:
+            reg_strategy:
+            reg_lambda:
             initial_scale: initial value of scales vector. If None, the vector is initialized randomly.
             lr: learning rate
             opt_log: flag to control training procedure. If True, then objective-value has lower-bound. else Not.
@@ -476,6 +499,17 @@ class ModelTrainerTorchBackend(TrainerBase):
         # definition of scales
         self.scales = self.init_scales(size_dimension=dimension_longer, init_scale=initial_scale)
         self.mmd_estimator.scales = self.scales
+        if (reg_strategy is None or reg_strategy == 'direct') and reg is not None:
+            assert isinstance(reg, torch.Tensor) and len(reg.size()) == 1
+            __reg = reg.to(self.device_obj)
+            __reg.requires_grad = True
+        elif reg_strategy is None and reg is None:
+            __reg = torch.tensor([0.0], device=self.device_obj, requires_grad=True)
+        elif reg_strategy == 'l1':
+            # putting temporal value
+            __reg = torch.tensor([0.0], device=self.device_obj, requires_grad=True)
+        else:
+            raise Exception()
 
         # definition of length-scale into median
         if is_length_scale_median or self.mmd_estimator.kernel_function_obj.lengthscale == -1.0:
@@ -487,12 +521,18 @@ class ModelTrainerTorchBackend(TrainerBase):
         params_target = [self.scales] + list(kernel_params_target.values())
         optimizer = torch.optim.SGD(params_target, lr=lr, momentum=0.9, nesterov=True)
 
-        avg_mmd2, avg_obj, avg_stat = self.run_validation(dataset_validation, reg, batchsize, num_workers, is_shuffle, is_validation_all,
+        avg_mmd2, avg_obj, avg_stat = self.run_validation(dataset_validation=dataset_validation,
+                                                          batchsize=batchsize,
+                                                          num_workers=num_workers,
+                                                          is_shuffle=is_shuffle,
+                                                          is_validation_all=is_validation_all,
                                                           is_first_iter=True, is_gc=is_gc)
         if avg_mmd2.item() < 0.0:
             raise Exception(f'MMD2 is minus value, which is against the principle. '
                             f'Stop training. Your MMD2 on validation is {avg_mmd2}')
         # end if
+
+
 
         # procedure of trainings
         training_log = []
@@ -501,18 +541,22 @@ class ModelTrainerTorchBackend(TrainerBase):
             avg_mmd2, avg_obj = self.run_train_epoch(optimizer,
                                                      dataset_training,
                                                      batchsize=batchsize,
-                                                     reg=reg,
                                                      num_workers=num_workers,
                                                      is_scales_non_negative=is_scales_non_negative,
                                                      is_shuffle=is_shuffle,
-                                                     is_gc=is_gc)
+                                                     is_gc=is_gc,
+                                                     reg=__reg,
+                                                     reg_strategy=reg_strategy,
+                                                     reg_lambda=reg_lambda)
             val_mmd2_pq, val_obj, val_stat = self.run_validation(dataset_validation=dataset_validation,
-                                                                 reg=reg,
                                                                  batchsize=batchsize,
                                                                  num_workers=num_workers,
                                                                  is_shuffle=is_shuffle,
                                                                  is_validation_all=is_validation_all,
-                                                                 is_gc=is_gc)
+                                                                 is_gc=is_gc,
+                                                                 reg=__reg,
+                                                                 reg_strategy=reg_strategy,
+                                                                 reg_lambda=reg_lambda)
             training_log.append(TrainingLog(epoch=epoch,
                                             avg_mmd_training=avg_mmd2.detach().cpu().numpy(),
                                             avg_obj_train=avg_obj.detach().cpu().numpy(),
