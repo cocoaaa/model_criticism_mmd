@@ -329,7 +329,7 @@ class StatsTestEvaluator(object):
                                                             f'len(seq_x_eval): {len(seq_x_eval)} ' \
                                                             f'len(seq_y_eval_diff): {len(seq_y_eval_diff)}'
             ds_train_diff, ds_val_diff = self.function_separation(x=x_train, y=y_train_diff)
-            kernels_diff = self.function_kernel_selection(ds_train=ds_train_diff, ds_val=ds_val_diff)
+            kernels_diff = self.function_kernel_selection(ds_train=ds_train_diff, ds_val=ds_val_diff, **kwargs)
             estimator_diff = [
                 (MMD.from_trained_parameters(k_obj.trained_mmd_parameter, self.device_obj), k_obj.test_power)
                 for k_obj in kernels_diff]
