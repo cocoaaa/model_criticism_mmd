@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "model_criticism_mmd"
-version = "2.4"
+version = "2.5"
 description = "A Model criticism on distributions via MMD"
 authors = ["Kensuke Mitsuzawa <kensuke.mit@gmail.com>"]
 maintainers = ["Kensuke Mitsuzawa <kensuke.mit@gmail.com>"]
