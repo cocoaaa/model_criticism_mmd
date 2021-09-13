@@ -165,7 +165,8 @@ class StatsTestEvaluator(object):
 
     def function_kernel_selection(self,
                                   ds_train: TwoSampleDataSet,
-                                  ds_val: TwoSampleDataSet) -> typing.List[SelectedKernel]:
+                                  ds_val: TwoSampleDataSet,
+                                  **kwargs) -> typing.List[SelectedKernel]:
         """
 
         Args:
@@ -192,7 +193,8 @@ class StatsTestEvaluator(object):
         # todos
         selection_result = kernel_selector.run_selection(is_shuffle=False,
                                                          is_training_auto_stop=True,
-                                                         num_workers=1)
+                                                         num_workers=1,
+                                                         **kwargs)
         return selection_result
 
     def function_permutation_test(self, mmd_estimator: MMD, x: torch.Tensor, y: torch.Tensor
@@ -275,7 +277,8 @@ class StatsTestEvaluator(object):
                   y_train_same: typing.Optional[typing.Union[torch.Tensor, np.ndarray]] = None,
                   y_train_diff: typing.Optional[typing.Union[torch.Tensor, np.ndarray]] = None,
                   seq_y_eval_same: typing.Optional[typing.List[typing.Union[torch.Tensor, np.ndarray]]] = None,
-                  seq_y_eval_diff: typing.Optional[typing.List[typing.Union[torch.Tensor, np.ndarray]]] = None
+                  seq_y_eval_diff: typing.Optional[typing.List[typing.Union[torch.Tensor, np.ndarray]]] = None,
+                  **kwargs
                   ) -> typing.List[TestResult]:
         """Run permutation tests for cases where X=Y and X!=Y.
 
@@ -287,6 +290,7 @@ class StatsTestEvaluator(object):
             y_train_diff: Y data for training. Y is from the different distribution.
             seq_y_eval_same: List of Y-same data for evaluation.
             seq_y_eval_diff: List of Y-diff for evaluation.
+            **kwargs: keywords for ModelTrainerTorchBackend.train()
 
         Returns: [TestResult]
         """
@@ -301,7 +305,7 @@ class StatsTestEvaluator(object):
                                                             f'len(seq_x_eval): {len(seq_x_eval)} ' \
                                                             f'len(seq_y_eval_same): {len(seq_y_eval_same)}'
             ds_train_same, ds_val_same = self.function_separation(x=x_train, y=y_train_same)
-            kernels_same = self.function_kernel_selection(ds_train=ds_train_same, ds_val=ds_val_same)
+            kernels_same = self.function_kernel_selection(ds_train=ds_train_same, ds_val=ds_val_same, **kwargs)
             estimator_same = [
                 (MMD.from_trained_parameters(k_obj.trained_mmd_parameter, self.device_obj), k_obj.test_power)
                 for k_obj in kernels_same]
