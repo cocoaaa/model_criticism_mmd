@@ -22,7 +22,9 @@ def test_unit():
                                           y_train_same=y_same,
                                           seq_y_eval_same=seq_y_eval_same,
                                           y_train_diff=y_diff,
-                                          seq_y_eval_diff=seq_y_eval_diff)
+                                          seq_y_eval_diff=seq_y_eval_diff,
+                                          reg_lambda=0.001,
+                                          reg_strategy='l1')
     formatter = TestResultGroupsFormatter(test_cases)
     formatter.format_result_summary_table()
     formatter.format_result_table()

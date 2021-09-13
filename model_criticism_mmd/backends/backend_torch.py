@@ -511,7 +511,7 @@ class ModelTrainerTorchBackend(TrainerBase):
             # putting temporal value
             __reg = torch.tensor([0.0], device=self.device_obj, requires_grad=True)
         else:
-            raise Exception()
+            raise Exception(f'No reg_strategy option named {reg_strategy}')
 
         # definition of length-scale into median
         if is_length_scale_median or self.mmd_estimator.kernel_function_obj.lengthscale == -1.0:
