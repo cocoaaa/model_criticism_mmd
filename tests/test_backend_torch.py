@@ -54,25 +54,34 @@ def test_auto_stop(resource_path_root: Path):
 
 def test_l1_regularization(resource_path_root: Path):
     """Putting L1 regularization for objective value."""
-    num_epochs = 100
+    num_epochs = 500
     x_train, y_train, x_test, y_test = data_processor(resource_path_root)
     init_scale = torch.tensor(np.array([0.05, 0.55]))
     dataset_train = TwoSampleDataSet(x_train, y_train)
     dataset_val = TwoSampleDataSet(x_test, y_test)
     kernel_function = BasicRBFKernelFunction(log_sigma=0.0)
-    trainer = ModelTrainerTorchBackend(MMD(kernel_function_obj=kernel_function))
-    trained_obj = trainer.train(dataset_training=dataset_train,
-                                dataset_validation=dataset_val,
-                                num_epochs=num_epochs,
-                                initial_scale=init_scale,
-                                reg_strategy='l1',
-                                reg_lambda=1.0)
-    mmd_value_trained = trainer.mmd_distance(x_test, y_test, is_detach=True)
-    model_from_param = ModelTrainerTorchBackend.model_from_trained(trained_obj)
-    mmd_value_from_params = model_from_param.mmd_distance(x_test, y_test, is_detach=True)
-    assert (mmd_value_trained.mmd - mmd_value_from_params.mmd) < 0.01, \
-        f"{mmd_value_trained.mmd}, {mmd_value_from_params.mmd}"
-    logger.info(trained_obj.scales)
+    trainer_01 = ModelTrainerTorchBackend(MMD(kernel_function_obj=kernel_function))
+    # test-power would be similar when reg_lambda:0.0 == reg_lambda is None
+    trained_obj_none = trainer_01.train(dataset_training=dataset_train,
+                                     dataset_validation=dataset_val,
+                                     num_epochs=num_epochs,
+                                     initial_scale=init_scale)
+
+    trainer_02 = ModelTrainerTorchBackend(MMD(kernel_function_obj=kernel_function))
+    trained_obj_zero_lambda = trainer_02.train(dataset_training=dataset_train,
+                                            dataset_validation=dataset_val,
+                                            num_epochs=num_epochs,
+                                            initial_scale=init_scale,
+                                            reg_strategy='l1',
+                                            reg_lambda=0.0)
+
+    trainer_03 = ModelTrainerTorchBackend(MMD(kernel_function_obj=kernel_function))
+    trained_obj_zero_lambda = trainer_03.train(dataset_training=dataset_train,
+                                            dataset_validation=dataset_val,
+                                            num_epochs=num_epochs,
+                                            initial_scale=init_scale,
+                                            reg_strategy='l1',
+                                            reg_lambda=0.1)
 
 
 def test_non_negative_scales(resource_path_root: Path):

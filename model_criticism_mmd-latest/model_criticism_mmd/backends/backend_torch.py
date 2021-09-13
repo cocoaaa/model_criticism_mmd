@@ -336,9 +336,10 @@ class ModelTrainerTorchBackend(TrainerBase):
                         is_gc: bool = False,
                         reg: torch.Tensor = None,
                         reg_strategy: str = None,
-                        reg_lambda: float = 0.01) -> typing.Tuple[torch.Tensor, torch.Tensor]:
+                        reg_lambda: float = 0.01) -> typing.Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         total_mmd2 = 0
         total_obj = 0
+        total_stat = 0
         n_batches = 0
 
         if self.device_obj == torch.device('cpu'):
@@ -357,6 +358,7 @@ class ModelTrainerTorchBackend(TrainerBase):
             assert np.isfinite(obj.detach().cpu().numpy())
             total_mmd2 += mmd2_pq
             total_obj += obj
+            total_stat += stat
             n_batches += 1
             # do differentiation now.
             obj.backward()
@@ -378,8 +380,9 @@ class ModelTrainerTorchBackend(TrainerBase):
         # end for
         avg_mmd2 = torch.div(total_mmd2, n_batches)
         avg_obj = torch.div(total_obj, n_batches)
+        avg_stat = torch.div(total_stat, n_batches)
 
-        return avg_mmd2, avg_obj
+        return avg_mmd2, avg_obj, avg_stat
 
     # ----------------------------------------------------------------------
 
@@ -428,13 +431,12 @@ class ModelTrainerTorchBackend(TrainerBase):
                            0.0))
         # end if
 
-    # todo double check
     def generate_regularization_term(self, reg: typing.Optional[torch.Tensor],
                                      reg_strategy: str, reg_lambda: float) -> torch.Tensor:
-        if reg_strategy == 'l1':
+        if reg_strategy == 'l1' and reg_lambda > 0.0:
             __reg = reg_lambda * torch.sum(torch.abs(self.scales))
             logger.debug(f'Using L1 regularization. Now L1 = {__reg}')
-        elif reg is None:
+        elif (reg is None) or (reg_lambda == 0.0):
             __reg = torch.tensor([0.0], requires_grad=True, device=self.device_obj)
         else:
             __reg = reg
@@ -461,7 +463,7 @@ class ModelTrainerTorchBackend(TrainerBase):
               is_length_scale_median: bool = True,
               is_gc: bool = False,
               reg_strategy: str = None,
-              reg_lambda: float = 0.01) -> TrainedMmdParameters:
+              reg_lambda: float = 0.0) -> TrainedMmdParameters:
         """Training (Optimization) of MMD parameters.
 
         Args:
@@ -538,16 +540,16 @@ class ModelTrainerTorchBackend(TrainerBase):
         training_log = []
         for epoch in range(1, num_epochs + 1):
             optimizer.zero_grad()
-            avg_mmd2, avg_obj = self.run_train_epoch(optimizer,
-                                                     dataset_training,
-                                                     batchsize=batchsize,
-                                                     num_workers=num_workers,
-                                                     is_scales_non_negative=is_scales_non_negative,
-                                                     is_shuffle=is_shuffle,
-                                                     is_gc=is_gc,
-                                                     reg=__reg,
-                                                     reg_strategy=reg_strategy,
-                                                     reg_lambda=reg_lambda)
+            avg_mmd2, avg_obj, avg_stat = self.run_train_epoch(optimizer,
+                                                               dataset_training,
+                                                               batchsize=batchsize,
+                                                               num_workers=num_workers,
+                                                               is_scales_non_negative=is_scales_non_negative,
+                                                               is_shuffle=is_shuffle,
+                                                               is_gc=is_gc,
+                                                               reg=__reg,
+                                                               reg_strategy=reg_strategy,
+                                                               reg_lambda=reg_lambda)
             val_mmd2_pq, val_obj, val_stat = self.run_validation(dataset_validation=dataset_validation,
                                                                  batchsize=batchsize,
                                                                  num_workers=num_workers,
@@ -563,7 +565,9 @@ class ModelTrainerTorchBackend(TrainerBase):
                                             mmd_validation=val_mmd2_pq.detach().cpu().numpy(),
                                             obj_validation=val_obj.detach().cpu().numpy(),
                                             sigma=None,
-                                            scales=self.scales.detach().cpu().numpy()))
+                                            scales=self.scales.detach().cpu().numpy(),
+                                            ratio_training=avg_stat.item(),
+                                            ratio_validation=val_stat.item()))
             self.log_message(epoch, avg_mmd2, avg_obj, val_mmd2_pq, val_stat, val_obj)
             if is_training_auto_stop and len(training_log) > auto_stop_epochs:
                 __val_validations = [t_obj.obj_validation for t_obj in training_log[epoch - auto_stop_epochs:epoch]]

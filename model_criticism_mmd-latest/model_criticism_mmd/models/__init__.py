@@ -17,6 +17,8 @@ class TrainingLog(object):
     obj_validation: float
     sigma: typing.Optional[float]
     scales: nptyping.NDArray[(typing.Any,), typing.Any]
+    ratio_training: typing.Optional[float] = None
+    ratio_validation: typing.Optional[float] = None
 
 
 @dataclasses.dataclass
@@ -28,6 +30,10 @@ class TrainedMmdParameters(object):
     sigma: typing.Optional[np.float] = None
     kernel_function_obj: BaseKernel = None
     func_mapping_network: typing.Any = None
+    ratio_validation: float = None
+
+    def __post_init__(self):
+        self.ratio_validation = self.training_log[-1].ratio_validation
 
     def to_npz(self, path_npz: str):
         assert os.path.exists(os.path.dirname(path_npz))
