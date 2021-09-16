@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: model-criticism-mmd
-Version: 2.6
+Version: 2.6.1
 Summary: A Model criticism on distributions via MMD
 License: BSD
 Author: Kensuke Mitsuzawa
