@@ -536,8 +536,10 @@ class ModelTrainerTorchBackend(TrainerBase):
         params_target = [self.scales] + list(kernel_params_target.values())
         # initialization of optimizer
         try:
-            if args_optimizer is None:
+            if name_optimizer is None:
                 optimizer = eval(f'torch.optim.{name_optimizer}')(params_target, lr=0.01, momentum=0.9, nesterov=True)
+            elif name_optimizer is not None and args_optimizer is None:
+                optimizer = eval(f'torch.optim.{name_optimizer}')(params_target)
             else:
                 optimizer = eval(f'torch.optim.{name_optimizer}')(params_target, **args_optimizer)
             # end if
