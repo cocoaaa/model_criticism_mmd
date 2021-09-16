@@ -227,6 +227,12 @@ class ModelTrainerTorchBackend(TrainerBase):
     def __init__(self,
                  mmd_estimator: MMD,
                  device_obj: torch.device = DEFAULT_DEVICE):
+        """
+
+        Args:
+            mmd_estimator:
+            device_obj:
+        """
         self.mmd_estimator = mmd_estimator
         self.device_obj = device_obj
         self.obj_value_min_threshold = torch.tensor([1e-6], device=self.device_obj)
@@ -451,7 +457,6 @@ class ModelTrainerTorchBackend(TrainerBase):
               ratio_train: float = 0.8,
               reg: typing.Optional[torch.Tensor] = None,
               initial_scale: torch.Tensor = None,
-              lr: float = 0.01,
               opt_log: bool = True,
               num_workers: int = 1,
               is_scales_non_negative: bool = False,
@@ -463,7 +468,11 @@ class ModelTrainerTorchBackend(TrainerBase):
               is_length_scale_median: bool = True,
               is_gc: bool = False,
               reg_strategy: str = None,
-              reg_lambda: float = 0.0) -> TrainedMmdParameters:
+              reg_lambda: float = 0.0,
+              name_optimizer: str = 'SGD',
+              args_optimizer: typing.Optional[typing.Dict[str, typing.Any]] = None,
+              is_use_lr_scheduler: bool = True,
+              args_lr_scheduler: typing.Optional[typing.Dict[str, typing.Any]] = None) -> TrainedMmdParameters:
         """Training (Optimization) of MMD parameters.
 
         Args:
@@ -491,6 +500,10 @@ class ModelTrainerTorchBackend(TrainerBase):
             is_length_scale_median: if True, set a length-scale into median in force. False, do nothing.
             is_gc: True if you release memory after each batch, False no.
             Normally, the speed will be slower if is_gc=True. You use the option when memory leaks during trainings.
+            name_optimizer: a name of a module in `torch.optim`.
+            args_optimizer: arguments of the optimizer object.
+            is_use_lr_scheduler:
+            args_lr_scheduler:
         Returns:
             TrainedMmdParameters
         """
@@ -521,7 +534,31 @@ class ModelTrainerTorchBackend(TrainerBase):
         # collects parameters to be optimized / set an optimizer
         kernel_params_target = self.mmd_estimator.kernel_function_obj.get_params(is_grad_param_only=True)
         params_target = [self.scales] + list(kernel_params_target.values())
-        optimizer = torch.optim.SGD(params_target, lr=lr, momentum=0.9, nesterov=True)
+        # initialization of optimizer
+        try:
+            if args_optimizer is None:
+                optimizer = eval(f'torch.optim.{name_optimizer}')(params_target, lr=0.01, momentum=0.9, nesterov=True)
+            else:
+                optimizer = eval(f'torch.optim.{name_optimizer}')(params_target, **args_optimizer)
+            # end if
+            logger.info(f'{optimizer.__str__()}')
+        except Exception as e:
+            raise Exception(f'Fail to initialize torch.optim.{name_optimizer}. Error {e}')
+        # end try
+        if is_use_lr_scheduler:
+            try:
+                if args_lr_scheduler is None:
+                    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer)
+                else:
+                    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, **args_lr_scheduler)
+                # end if
+                logger.info(f'Using ReduceLROnPlateau scheduler')
+            except Exception as e:
+                raise Exception(f'Fail to initialize. Error {e}')
+            # end try
+        else:
+            scheduler = None
+        # end if
 
         avg_mmd2, avg_obj, avg_stat = self.run_validation(dataset_validation=dataset_validation,
                                                           batchsize=batchsize,
@@ -533,8 +570,6 @@ class ModelTrainerTorchBackend(TrainerBase):
             raise Exception(f'MMD2 is minus value, which is against the principle. '
                             f'Stop training. Your MMD2 on validation is {avg_mmd2}')
         # end if
-
-
 
         # procedure of trainings
         training_log = []
@@ -578,6 +613,9 @@ class ModelTrainerTorchBackend(TrainerBase):
                                 f'epochs are within {__variance_validations} < {auto_stop_threshold}')
                     break
                 # end if
+            # end if
+            if scheduler is not None:
+                scheduler.step(val_obj)
             # end if
         # end for
         return TrainedMmdParameters(

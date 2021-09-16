@@ -26,13 +26,35 @@ def data_processor(resource_path_root: Path
     return x_train, y_train, x_test, y_test
 
 
+def test_optimizers(resource_path_root: Path):
+    """test case to check any optimization modules"""
+    x_train, y_train, x_test, y_test = data_processor(resource_path_root)
+    init_scale = torch.tensor(np.array([0.05, 0.55]))
+    device_obj = torch.device(torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
+    kernel_function = BasicRBFKernelFunction(log_sigma=0.0, device_obj=device_obj)
+    trainer = ModelTrainerTorchBackend(
+        MMD(kernel_function_obj=kernel_function, device_obj=device_obj), device_obj=device_obj)
+    dataset_train = TwoSampleDataSet(x_train, y_train, device_obj)
+    dataset_val = TwoSampleDataSet(x_test, y_test, device_obj)
+    trained_obj = trainer.train(dataset_training=dataset_train,
+                                dataset_validation=dataset_val,
+                                num_epochs=100,
+                                initial_scale=init_scale,
+                                is_training_auto_stop=True,
+                                auto_stop_epochs=5,
+                                auto_stop_threshold=0.00001,
+                                name_optimizer='Adam',
+                                args_optimizer={})
+
+
 def test_auto_stop(resource_path_root: Path):
+    """test case to check auto stop"""
     x_train, y_train, x_test, y_test = data_processor(resource_path_root)
     init_scale = torch.tensor(np.array([0.05, 0.55]))
     device_obj = torch.device(torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
     kernel_function = BasicRBFKernelFunction(log_sigma=0.0, device_obj=device_obj, opt_sigma=True)
-    trainer = ModelTrainerTorchBackend(MMD(kernel_function_obj=kernel_function, device_obj=device_obj),
-                                           device_obj=device_obj)
+    trainer = ModelTrainerTorchBackend(
+        MMD(kernel_function_obj=kernel_function, device_obj=device_obj), device_obj=device_obj)
     dataset_train = TwoSampleDataSet(x_train, y_train, device_obj)
     dataset_val = TwoSampleDataSet(x_test, y_test, device_obj)
     trained_obj = trainer.train(dataset_training=dataset_train,
@@ -54,7 +76,7 @@ def test_auto_stop(resource_path_root: Path):
 
 def test_l1_regularization(resource_path_root: Path):
     """Putting L1 regularization for objective value."""
-    num_epochs = 500
+    num_epochs = 100
     x_train, y_train, x_test, y_test = data_processor(resource_path_root)
     init_scale = torch.tensor(np.array([0.05, 0.55]))
     dataset_train = TwoSampleDataSet(x_train, y_train)
@@ -63,25 +85,25 @@ def test_l1_regularization(resource_path_root: Path):
     trainer_01 = ModelTrainerTorchBackend(MMD(kernel_function_obj=kernel_function))
     # test-power would be similar when reg_lambda:0.0 == reg_lambda is None
     trained_obj_none = trainer_01.train(dataset_training=dataset_train,
-                                     dataset_validation=dataset_val,
-                                     num_epochs=num_epochs,
-                                     initial_scale=init_scale)
+                                        dataset_validation=dataset_val,
+                                        num_epochs=num_epochs,
+                                        initial_scale=init_scale)
 
     trainer_02 = ModelTrainerTorchBackend(MMD(kernel_function_obj=kernel_function))
     trained_obj_zero_lambda = trainer_02.train(dataset_training=dataset_train,
-                                            dataset_validation=dataset_val,
-                                            num_epochs=num_epochs,
-                                            initial_scale=init_scale,
-                                            reg_strategy='l1',
-                                            reg_lambda=0.0)
+                                               dataset_validation=dataset_val,
+                                               num_epochs=num_epochs,
+                                               initial_scale=init_scale,
+                                               reg_strategy='l1',
+                                               reg_lambda=0.0)
 
     trainer_03 = ModelTrainerTorchBackend(MMD(kernel_function_obj=kernel_function))
     trained_obj_zero_lambda = trainer_03.train(dataset_training=dataset_train,
-                                            dataset_validation=dataset_val,
-                                            num_epochs=num_epochs,
-                                            initial_scale=init_scale,
-                                            reg_strategy='l1',
-                                            reg_lambda=0.1)
+                                               dataset_validation=dataset_val,
+                                               num_epochs=num_epochs,
+                                               initial_scale=init_scale,
+                                               reg_strategy='l1',
+                                               reg_lambda=0.1)
 
 
 def test_non_negative_scales(resource_path_root: Path):
@@ -171,6 +193,7 @@ def test_devel(resource_path_root: Path):
 
 
 if __name__ == "__main__":
+    test_optimizers(pathlib.Path('./resources'))
     test_devel(pathlib.Path('./resources'))
     test_auto_stop(pathlib.Path('./resources'))
     test_non_negative_scales(pathlib.Path('./resources'))
