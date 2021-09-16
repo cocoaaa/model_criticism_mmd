@@ -71,7 +71,8 @@ def test_comparison(resource_path_root: pathlib.Path):
                                                 batchsize=batch_size,
                                                 dataset_validation=dataset_val,
                                                 initial_scale=torch.tensor(initial_scales),
-                                                opt_log=True)
+                                                opt_log=True,
+                                                is_use_lr_scheduler=False)
         result_stacks_with_sigma.append(OptimizationResult(x, y, trained_obj_theano, trained_obj_torch))
 
         # without sigma optimization
@@ -92,7 +93,9 @@ def test_comparison(resource_path_root: pathlib.Path):
         trainer_torch = ModelTrainerTorchBackend(mmd_estimator=mmd_estimator, device_obj=device_obj_torch)
         trained_obj_torch = trainer_torch.train(dataset_training=dataset_train,
                                                 num_epochs=n_epoch,
-                                                batchsize=batch_size, dataset_validation=dataset_val)
+                                                batchsize=batch_size,
+                                                dataset_validation=dataset_val,
+                                                is_use_lr_scheduler=False)
         result_stacks_without_sigma.append(OptimizationResult(x, y, trained_obj_theano, trained_obj_torch))
     # end for
 
@@ -130,8 +133,6 @@ def test_comparison(resource_path_root: pathlib.Path):
 
         assert int(numpy.argmax(set_without_sigma_out.torch.scales)) == dim_most_diff_variance, \
             f'{int(numpy.argmax(set_without_sigma_out.theano.scales))} != {dim_most_diff_variance}'
-        # assert int(numpy.argmax(set_without_sigma_out.torch.scales)) == dim_most_diff_variance, \
-        #     f'{int(numpy.argmax(set_without_sigma_out.theano.scales))} != {dim_most_diff_variance}'
 
 
 if __name__ == '__main__':
