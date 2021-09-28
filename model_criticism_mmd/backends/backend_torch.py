@@ -9,6 +9,7 @@ from model_criticism_mmd.models import TrainingLog, TrainedMmdParameters, Traine
 from model_criticism_mmd.models.static import MmdValues, TypeInputData, DEFAULT_DEVICE
 from model_criticism_mmd.backends import kernels_torch
 from model_criticism_mmd.exceptions import NanException
+from model_criticism_mmd.models import report_generators
 import gc
 
 device_default = torch.device('cpu')
@@ -472,7 +473,8 @@ class ModelTrainerTorchBackend(TrainerBase):
               name_optimizer: str = 'SGD',
               args_optimizer: typing.Optional[typing.Dict[str, typing.Any]] = None,
               is_use_lr_scheduler: bool = True,
-              args_lr_scheduler: typing.Optional[typing.Dict[str, typing.Any]] = None) -> TrainedMmdParameters:
+              args_lr_scheduler: typing.Optional[typing.Dict[str, typing.Any]] = None,
+              report_to: typing.Optional[report_generators.BaseReport] = None) -> TrainedMmdParameters:
         """Training (Optimization) of MMD parameters.
 
         Args:
@@ -504,6 +506,7 @@ class ModelTrainerTorchBackend(TrainerBase):
             args_optimizer: arguments of the optimizer object.
             is_use_lr_scheduler:
             args_lr_scheduler:
+            report_to: `report_generators.BaseReport` object that records log info.
         Returns:
             TrainedMmdParameters
         """
@@ -561,6 +564,22 @@ class ModelTrainerTorchBackend(TrainerBase):
         else:
             scheduler = None
         # end if
+        training_params = {}
+        for variable in ['num_epochs', 'batchsize', 'reg', 'opt_log',
+                         'is_scales_non_negative', 'is_training_auto_stop',
+                         'auto_stop_threshold', 'auto_stop_epochs',
+                         'is_shuffle',
+                         'reg_strategy',
+                         'reg_lambda',
+                         'name_optimizer',
+                         'args_optimizer',
+                         'is_use_lr_scheduler',
+                         'args_lr_scheduler']:
+            training_params[variable] = eval(variable)
+        # end for
+        if report_to is not None:
+            report_to.start(training_params)
+        # end if
 
         avg_mmd2, avg_obj, avg_stat = self.run_validation(dataset_validation=dataset_validation,
                                                           batchsize=batchsize,
@@ -596,16 +615,20 @@ class ModelTrainerTorchBackend(TrainerBase):
                                                                  reg=__reg,
                                                                  reg_strategy=reg_strategy,
                                                                  reg_lambda=reg_lambda)
-            training_log.append(TrainingLog(epoch=epoch,
-                                            avg_mmd_training=avg_mmd2.detach().cpu().numpy(),
-                                            avg_obj_train=avg_obj.detach().cpu().numpy(),
-                                            mmd_validation=val_mmd2_pq.detach().cpu().numpy(),
-                                            obj_validation=val_obj.detach().cpu().numpy(),
-                                            sigma=None,
-                                            scales=self.scales.detach().cpu().numpy(),
-                                            ratio_training=avg_stat.item(),
-                                            ratio_validation=val_stat.item()))
+            log_record_obj = TrainingLog(epoch=epoch,
+                                         avg_mmd_training=avg_mmd2.detach().cpu().numpy(),
+                                         avg_obj_train=avg_obj.detach().cpu().numpy(),
+                                         mmd_validation=val_mmd2_pq.detach().cpu().numpy(),
+                                         obj_validation=val_obj.detach().cpu().numpy(),
+                                         sigma=None,
+                                         scales=self.scales.detach().cpu().numpy(),
+                                         ratio_training=avg_stat.item(),
+                                         ratio_validation=val_stat.item())
+            training_log.append(log_record_obj)
             self.log_message(epoch, avg_mmd2, avg_obj, val_mmd2_pq, val_stat, val_obj)
+            if report_to is not None:
+                report_to.record(log_object=log_record_obj)
+            # end if
             if is_training_auto_stop and len(training_log) > auto_stop_epochs:
                 __val_validations = [t_obj.obj_validation for t_obj in training_log[epoch - auto_stop_epochs:epoch]]
                 __variance_validations = max(__val_validations) - min(__val_validations)
@@ -620,10 +643,18 @@ class ModelTrainerTorchBackend(TrainerBase):
                 scheduler.step(val_obj)
             # end if
         # end for
-        return TrainedMmdParameters(
+
+        result_obj = TrainedMmdParameters(
             scales=self.scales.detach().cpu().numpy(),
             training_log=training_log,
             kernel_function_obj=self.mmd_estimator.kernel_function_obj)
+        if report_to is not None:
+            if isinstance(report_to, report_generators.WandbReport):
+                result_obj.to_pickle(str(report_to.path_tmp_model_dir))
+            # end if
+            report_to.finish()
+        # end if
+        return result_obj
 
     def mmd_distance(self,
                      x: TypeInputData,
