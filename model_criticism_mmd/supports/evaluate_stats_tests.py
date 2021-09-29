@@ -207,6 +207,7 @@ class StatsTestEvaluator(object):
                                                     device_obj=self.device_obj)
         mmd_data_sample = test_operator.compute_statistic()
         p_value = test_operator.compute_p_value(mmd_data_sample)
+        # todo write logger command here. especially for Wandb.
         if isinstance(p_value, torch.Tensor):
             p_value = p_value.detach().cpu().numpy()
         # end
