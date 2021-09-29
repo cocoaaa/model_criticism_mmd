@@ -616,10 +616,10 @@ class ModelTrainerTorchBackend(TrainerBase):
                                                                  reg_strategy=reg_strategy,
                                                                  reg_lambda=reg_lambda)
             log_record_obj = TrainingLog(epoch=epoch,
-                                         avg_mmd_training=avg_mmd2.detach().cpu().numpy(),
-                                         avg_obj_train=avg_obj.detach().cpu().numpy(),
-                                         mmd_validation=val_mmd2_pq.detach().cpu().numpy(),
-                                         obj_validation=val_obj.detach().cpu().numpy(),
+                                         avg_mmd_training=avg_mmd2.item(),
+                                         avg_obj_train=avg_obj.item(),
+                                         mmd_validation=val_mmd2_pq.item(),
+                                         obj_validation=val_obj.item(),
                                          sigma=None,
                                          scales=self.scales.detach().cpu().numpy(),
                                          ratio_training=avg_stat.item(),
@@ -650,7 +650,7 @@ class ModelTrainerTorchBackend(TrainerBase):
             kernel_function_obj=self.mmd_estimator.kernel_function_obj)
         if report_to is not None:
             if isinstance(report_to, report_generators.WandbReport):
-                result_obj.to_pickle(str(report_to.path_tmp_model_dir))
+                result_obj.to_pickle(str(report_to.path_tmp_model_dir.joinpath(report_to.model_name)))
             # end if
             report_to.finish()
         # end if
