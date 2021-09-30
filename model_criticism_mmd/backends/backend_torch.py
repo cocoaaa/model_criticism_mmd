@@ -15,7 +15,7 @@ import gc
 device_default = torch.device('cpu')
 
 
-class MMD(object):
+class MMD(torch.nn.Module):
     def __init__(self,
                  kernel_function_obj: kernels_torch.BaseKernel,
                  scales: typing.Optional[torch.Tensor] = None,
@@ -30,6 +30,7 @@ class MMD(object):
             device_obj: device object of torch.
             biased: If True, then MMD estimator is biased estimator. Else unbiased estimator.
         """
+        super(MMD, self).__init__()
         self.kernel_function_obj = kernel_function_obj
         self.device_obj = device_obj
         self.min_var_est = torch.tensor([1e-8], dtype=torch.float64, device=device_obj)
@@ -193,11 +194,11 @@ class MMD(object):
         # end if
     # end if
 
-    def mmd_distance(self,
-                     x: TypeInputData,
-                     y: TypeInputData,
-                     is_detach: bool = False,
-                     **kwargs) -> MmdValues:
+    def forward(self,
+                x: TypeInputData,
+                y: TypeInputData,
+                is_detach: bool = False,
+                **kwargs) -> MmdValues:
         """Computes MMD value.
 
         Returns:
@@ -221,6 +222,13 @@ class MMD(object):
             return MmdValues(mmd2.cpu().detach(), ratio.cpu().detach())
         else:
             return MmdValues(mmd2, ratio)
+
+    def mmd_distance(self,
+                     x: TypeInputData,
+                     y: TypeInputData,
+                     is_detach: bool = False,
+                     **kwargs) -> MmdValues:
+        return self.forward(x, y, is_detach, **kwargs)
 
 
 class ModelTrainerTorchBackend(TrainerBase):
@@ -647,7 +655,10 @@ class ModelTrainerTorchBackend(TrainerBase):
         result_obj = TrainedMmdParameters(
             scales=self.scales.detach().cpu().numpy(),
             training_log=training_log,
-            kernel_function_obj=self.mmd_estimator.kernel_function_obj)
+            kernel_function_obj=self.mmd_estimator.kernel_function_obj,
+            torch_model=self.mmd_estimator
+        )
+
         if report_to is not None:
             if isinstance(report_to, report_generators.WandbReport):
                 result_obj.to_pickle(str(report_to.path_tmp_model_dir.joinpath(report_to.model_name)))
