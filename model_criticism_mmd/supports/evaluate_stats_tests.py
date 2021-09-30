@@ -15,6 +15,7 @@ from model_criticism_mmd.backends import kernels_torch
 from model_criticism_mmd.models import DEFAULT_DEVICE
 from model_criticism_mmd.logger_unit import logger
 
+from model_criticism_mmd.models.report_generators import BaseReport
 
 @dataclass
 class TestResult(object):
@@ -130,7 +131,21 @@ class StatsTestEvaluator(object):
                  initial_value_scales: typing.Optional[torch.Tensor] = None,
                  threshold_p_value: float = 0.05,
                  ratio_training: float = 0.8,
-                 kernels_no_optimization: typing.Optional[typing.List[kernels_torch.BaseKernel]] = None):
+                 kernels_no_optimization: typing.Optional[typing.List[kernels_torch.BaseKernel]] = None,
+                 report_to: typing.Optional[BaseReport] = None):
+        """
+
+        Args:
+            candidate_kernels:
+            device_obj:
+            num_epochs:
+            n_permutation_test:
+            initial_value_scales:
+            threshold_p_value:
+            ratio_training:
+            kernels_no_optimization:
+            report_to: `model_criticism_mmd.models.report_generators.BaseReport`
+        """
         self.candidate_kernels = candidate_kernels
         self.device_obj = device_obj
         self.num_epochs = num_epochs
@@ -139,6 +154,7 @@ class StatsTestEvaluator(object):
         self.threshold_p_value = threshold_p_value
         self.ratio_training = ratio_training
         self.kernels_no_optimization = kernels_no_optimization
+        self.report_to = report_to
 
     def function_separation(self, x: torch.Tensor, y: torch.Tensor) -> typing.Tuple[TwoSampleDataSet, TwoSampleDataSet]:
         ind_training = int((len(x) - 1) * self.ratio_training)
@@ -190,14 +206,17 @@ class StatsTestEvaluator(object):
                                            is_training=True,
                                            dataset_training=ds_train,
                                            candidate_kernels=self.candidate_kernels)
-        # todos
+        # todo log selection process into report.
         selection_result = kernel_selector.run_selection(is_shuffle=False,
                                                          is_training_auto_stop=True,
                                                          num_workers=1,
                                                          **kwargs)
         return selection_result
 
-    def function_permutation_test(self, mmd_estimator: MMD, x: torch.Tensor, y: torch.Tensor
+    def function_permutation_test(self,
+                                  mmd_estimator: MMD,
+                                  x: torch.Tensor,
+                                  y: torch.Tensor
                                   ) -> typing.Tuple[PermutationTest, float, float]:
         """Runs permutation test."""
         dataset_for_permutation_test_data_sample = TwoSampleDataSet(x, y, self.device_obj)
@@ -207,7 +226,6 @@ class StatsTestEvaluator(object):
                                                     device_obj=self.device_obj)
         mmd_data_sample = test_operator.compute_statistic()
         p_value = test_operator.compute_p_value(mmd_data_sample)
-        # todo write logger command here. especially for Wandb.
         if isinstance(p_value, torch.Tensor):
             p_value = p_value.detach().cpu().numpy()
         # end
@@ -235,6 +253,8 @@ class StatsTestEvaluator(object):
         """
         results = []
         for estimator_obj, ratio in mmd_estimators:
+            # todo start loggin into wandb.
+            # todo saving parameters
             __test_operator, __p, __mmd_whole = self.function_permutation_test(estimator_obj, x, y)
             distributions_test = __test_operator.stats_permutation_test
             if isinstance(distributions_test, torch.Tensor):
@@ -256,6 +276,8 @@ class StatsTestEvaluator(object):
             else:
                 scales = estimator_obj.scales
             # end
+
+            # todo saving null_distribution, p-vale, statistics, scales, kernel-param
 
             results.append(TestResult(codename_experiment=code_approach,
                                       kernel_parameter=kernel_param,
