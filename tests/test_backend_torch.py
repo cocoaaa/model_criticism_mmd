@@ -4,6 +4,7 @@ import typing
 import numpy
 import numpy as np
 from pathlib import Path
+from tempfile import mkdtemp
 
 from model_criticism_mmd.backends.backend_torch import ModelTrainerTorchBackend, MMD
 from model_criticism_mmd.logger_unit import logger
@@ -164,8 +165,8 @@ def test_multi_workers(resource_path_root: Path):
 
 
 def test_devel(resource_path_root: Path):
+    """A test case for general usage."""
     num_epochs = 100
-    path_trained_model = './trained_mmd.pickle'
     x_train, y_train, x_test, y_test = data_processor(resource_path_root)
     init_scale = torch.tensor(np.array([0.05, 0.55]))
     device_obj = torch.device(torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
@@ -182,14 +183,25 @@ def test_devel(resource_path_root: Path):
                                     num_epochs=num_epochs,
                                     initial_scale=init_scale,
                                     opt_log=True)
-        trained_obj.to_pickle(path_trained_model)
-        logger.info(f'scales={trained_obj.scales}')
+        path_dir_temp = mkdtemp()
+        path_file_pickle = Path(path_dir_temp).joinpath('trained.pickle')
+        path_file_torch = Path(path_dir_temp).joinpath('model.torch')
+        trained_obj.to_pickle(str(path_file_pickle))
+        trained_obj.save_torch_model(str(path_file_torch))
+
+        # resume with pickle
         mmd_value_trained = trainer.mmd_distance(x_test, y_test, is_detach=True)
         model_from_param = ModelTrainerTorchBackend.model_from_trained(trained_obj, device_obj=device_obj)
         mmd_value_from_params = model_from_param.mmd_distance(x_test, y_test, is_detach=True)
         assert (mmd_value_trained.mmd - mmd_value_from_params.mmd) < 0.01, \
             f"{mmd_value_trained.mmd}, {mmd_value_from_params.mmd}"
-        logger.info(trained_obj.scales)
+
+        # reuse the model file. Check the saved model works
+        with open(path_file_torch, 'rb') as f:
+            mmd_estimator = torch.load(f)
+        # end with
+        res = mmd_estimator.mmd_distance(x_test, y_test)
+        assert mmd_value_trained.mmd - res.mmd < 0.01
 
 
 if __name__ == "__main__":
