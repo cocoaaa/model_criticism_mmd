@@ -272,6 +272,12 @@ class ModelTrainerTorchBackend(TrainerBase):
         # end if
         return scales
 
+    @staticmethod
+    def __check_valid_batch(dataset: TwoSampleDataSet, batch_size: int) -> bool:
+        assert len(dataset.x) % batch_size > 1, f'Specify another batch_size.'
+        assert len(dataset.y) % batch_size > 1, f'Specify another batch_size.'
+        return True
+
     def run_validation(self,
                        dataset_validation: TwoSampleDataSet,
                        batchsize: int,
@@ -291,6 +297,7 @@ class ModelTrainerTorchBackend(TrainerBase):
                          f'N(x)={dataset_validation.length_x},N(y)={dataset_validation.length_y} < batchsize')
             is_validation_all = True
         # end if
+        self.__check_valid_batch(dataset_validation, batchsize)
 
         if is_validation_all:
             x_val, y_val = dataset_validation.get_all_item()
@@ -356,6 +363,7 @@ class ModelTrainerTorchBackend(TrainerBase):
         total_obj = 0
         total_stat = 0
         n_batches = 0
+        self.__check_valid_batch(dataset, batchsize)
 
         if self.device_obj == torch.device('cpu'):
             data_loader = torch.utils.data.DataLoader(dataset, batch_size=batchsize, shuffle=is_shuffle,
