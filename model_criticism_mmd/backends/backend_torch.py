@@ -300,8 +300,9 @@ class ModelTrainerTorchBackend(TrainerBase):
         self.__check_valid_batch(dataset_validation, batchsize)
 
         if is_validation_all:
+            reg_term = self.generate_regularization_term(reg=reg, reg_strategy=reg_strategy, reg_lambda=reg_lambda)
             x_val, y_val = dataset_validation.get_all_item()
-            val_mmd2_pq, val_stat, val_obj = self.forward(x_val, y_val, reg=reg, is_validation=True)
+            val_mmd2_pq, val_stat, val_obj = self.forward(x_val, y_val, reg=reg_term, is_validation=True)
             if is_first_iter:
                 logger.info(
                     f'Validation at 0. MMD^2 = {val_mmd2_pq.detach().cpu().numpy()}, '
@@ -322,7 +323,8 @@ class ModelTrainerTorchBackend(TrainerBase):
                                                           batch_size=batchsize, shuffle=is_shuffle)
             # end if
             for xbatch, ybatch in data_loader:
-                mmd2_pq, stat, obj = self.forward(xbatch, ybatch, reg=reg)
+                reg_term = self.generate_regularization_term(reg=reg, reg_strategy=reg_strategy, reg_lambda=reg_lambda)
+                mmd2_pq, stat, obj = self.forward(xbatch, ybatch, reg=reg_term)
                 # end if
                 assert np.isfinite(mmd2_pq.detach().cpu().numpy())
                 assert np.isfinite(obj.detach().cpu().numpy())
@@ -502,7 +504,6 @@ class ModelTrainerTorchBackend(TrainerBase):
             reg_strategy:
             reg_lambda:
             initial_scale: initial value of scales vector. If None, the vector is initialized randomly.
-            lr: learning rate
             opt_log: flag to control training procedure. If True, then objective-value has lower-bound. else Not.
             dataset_validation:
             num_workers: #worker for training.
