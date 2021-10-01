@@ -131,8 +131,12 @@ def test_comparison(resource_path_root: pathlib.Path):
             key=lambda t: t[1], reverse=True)[0][0]
         # end for
 
-        assert int(numpy.argmax(set_without_sigma_out.torch.scales)) == dim_most_diff_variance, \
-            f'{int(numpy.argmax(set_without_sigma_out.theano.scales))} != {dim_most_diff_variance}'
+        scales_torch = set_without_sigma_out.torch.scales ** 2
+        assert int(numpy.argmax(scales_torch)) == dim_most_diff_variance, \
+            f'{int(numpy.argmax(scales_torch))} != {dim_most_diff_variance}'
+        scales_theano = set_without_sigma_out.theano.scales ** 2
+        assert int(numpy.argmax(scales_theano)) == dim_most_diff_variance, \
+            f'{int(numpy.argmax(scales_theano))} != {dim_most_diff_variance}'
 
 
 if __name__ == '__main__':
