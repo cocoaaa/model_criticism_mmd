@@ -65,7 +65,7 @@ make test
 The source code is licensed MIT. The website content is licensed CC BY 4.0.
 
 ```
-@misc{sumo-docker-pipeline,
+@misc{model-criticism-mmd-implementation-public,
   author = {Kensuke Mitsuzawa},
   title = {model-criticism-mmd},
   year = {2021},

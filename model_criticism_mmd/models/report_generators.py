@@ -35,6 +35,7 @@ class OptimizerLogReport(OptimizerReport):
     def __init__(self,
                  path_log_file: str,
                  style: str = 'json'):
+        super(OptimizerLogReport, self)
         assert Path(path_log_file).parent.exists()
         formatter = Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         # create file handler for logger.
@@ -67,13 +68,14 @@ class OptimizerLogReport(OptimizerReport):
         self.logger.info('end optimization.')
 
 
-class WandbReport(OptimizerReport):
+class OptimizerWandbReport(OptimizerReport):
     def __init__(self,
                  project_name: str = 'model_criticism_mmd',
                  run_name: Optional[str] = None,
                  is_save_model: bool = True,
                  path_tmp_model_dir: Optional[pathlib.Path] = None,
                  model_name: str = 'mmd'):
+        super(OptimizerWandbReport, self).__init__()
         if is_save_model and path_tmp_model_dir is None:
             self.path_tmp_model_dir = pathlib.Path(mkdtemp())
         elif is_save_model and path_tmp_model_dir is not None:

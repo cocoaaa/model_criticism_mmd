@@ -1,28 +1,5 @@
-# def sample_data_preparation():
-#     x_data_sample = np.zeros((N_DATA_SIZE, N_TIME_LENGHTH))
-#     y_data_sample = np.zeros((N_DATA_SIZE, N_TIME_LENGHTH))
-#     y_data_sample_laplase = np.zeros((N_DATA_SIZE, N_TIME_LENGHTH))
-#
-#     x_data_sample[:, 0] = INITIAL_VALUE_AT_ONE
-#     y_data_sample[:, 0] = INITIAL_VALUE_AT_ONE
-#     y_data_sample_laplase[:, 0] = INITIAL_VALUE_AT_ONE
-#
-#     for time_t in tqdm.tqdm(range(0, N_TIME_LENGHTH - 1)):
-#         noise_x = np.random.normal(NOISE_MU_X, NOISE_SIGMA_X, (N_DATA_SIZE,))
-#         noise_y = np.random.normal(NOISE_MU_Y, NOISE_SIGMA_Y, (N_DATA_SIZE,))
-#         noise_y_laplase = np.random.laplace(NOISE_MU_Y, NOISE_SIGMA_Y, (N_DATA_SIZE,))
-#         x_data_sample[:, time_t + 1] = x_data_sample[:, time_t].flatten() + noise_x
-#         y_data_sample[:, time_t + 1] = y_data_sample[:, time_t].flatten() + noise_y
-#         y_data_sample_laplase[:, time_t + 1] = y_data_sample_laplase[:, time_t].flatten() + noise_y_laplase
-#         # end if
-#     assert x_data_sample.shape == (N_DATA_SIZE, N_TIME_LENGHTH)
-#     assert y_data_sample.shape == (N_DATA_SIZE, N_TIME_LENGHTH)
-#     assert y_data_sample_laplase.shape == (N_DATA_SIZE, N_TIME_LENGHTH)
-#     assert np.array_equal(x_data_sample, y_data_sample) is False
-
 import numpy as np
 import torch
-from tabulate import tabulate
 
 from model_criticism_mmd.supports import StatsTestEvaluator, TestResultGroupsFormatter
 from model_criticism_mmd import kernels_torch

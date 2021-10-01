@@ -274,8 +274,10 @@ class ModelTrainerTorchBackend(TrainerBase):
 
     @staticmethod
     def __check_valid_batch(dataset: TwoSampleDataSet, batch_size: int) -> bool:
-        assert len(dataset.x) % batch_size > 1, f'Specify another batch_size.'
-        assert len(dataset.y) % batch_size > 1, f'Specify another batch_size.'
+        assert (len(dataset.x) % batch_size > 1) or (len(dataset.x) % batch_size == 0), \
+            f'Specify another batch_size. len(x) mod {batch_size} = {len(dataset.x) % batch_size}'
+        assert (len(dataset.x) % batch_size > 1) or (len(dataset.x) % batch_size == 0), \
+            f'Specify another batch_size. len(x) mod {batch_size} = {len(dataset.x) % batch_size}'
         return True
 
     def run_validation(self,
@@ -671,7 +673,7 @@ class ModelTrainerTorchBackend(TrainerBase):
 
         if report_to is not None:
             for r in report_to:
-                if isinstance(r, report_generators.WandbReport):
+                if isinstance(r, report_generators.OptimizerWandbReport):
                     result_obj.to_pickle(str(r.path_tmp_model_dir.joinpath(r.model_name)))
                 # end if
                 r.finish()

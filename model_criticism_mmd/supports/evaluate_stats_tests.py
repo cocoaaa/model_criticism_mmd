@@ -50,6 +50,10 @@ class TestResultList(MutableSequence):
         else:
             self._list = list()
 
+    def __add__(self, other: "TestResultList"):
+        assert all([isinstance(d, TestResult) for d in other]), 'Input must be `typing.List[TestResult]`'
+        return self._list + other._list
+
     def __repr__(self):
         return "<{0} {1}>".format(self.__class__.__name__, self._list)
 
@@ -89,7 +93,7 @@ class TestResultList(MutableSequence):
         """
         assert file_format in ('pickle', 'torch'), f'{file_format} is not acceptable. Must be either pickle or torch.'
         assert path_target.parent.exists(), f'No path named {path_target.parent}'
-        data_dict = [dataclasses.asdict(d) for d in sorted(self._list, key=lambda d: d['ratio'], reverse=True)]
+        data_dict = [dataclasses.asdict(d) for d in sorted(self._list, key=lambda d: d.ratio, reverse=True)]
         with path_target.open('wb') as f:
             if file_format == 'pickle':
                 pickle.dump(data_dict, f)

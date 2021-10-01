@@ -1,4 +1,5 @@
-from model_criticism_mmd.models.report_generators import WandbReport, LogReport
+from model_criticism_mmd.models.report_generators \
+    import OptimizerWandbReport, OptimizerLogReport
 from tempfile import mktemp
 from model_criticism_mmd.models import TrainingLog
 from model_criticism_mmd import ModelTrainerTorchBackend, MMD, TwoSampleDataSet, split_data
@@ -15,7 +16,7 @@ def test_wandb():
         # skip the test
         pass
     else:
-        report_gen = WandbReport(project_name='test')
+        report_gen = OptimizerWandbReport(project_name='test')
         dummy_np = np.zeros(10)
         test_log = TrainingLog(epoch=0, avg_mmd_training=0, avg_obj_train=0, mmd_validation=0, obj_validation=0,
                                scales=dummy_np, sigma=None)
@@ -29,7 +30,7 @@ def test_log_report():
     test_log = TrainingLog(epoch=0, avg_mmd_training=0,
                            avg_obj_train=0, mmd_validation=0,
                            obj_validation=0, sigma=None, scales=dummy_np)
-    log_reporter = LogReport(path_log_file=path_temp_file)
+    log_reporter = OptimizerLogReport(path_log_file=path_temp_file)
     log_reporter.record(test_log)
     log_reporter.finish()
 
@@ -44,7 +45,7 @@ def test_training_log_report():
     y_test = y[n_train:]
 
     path_temp_file = mktemp()
-    log_reporter = LogReport(path_log_file=path_temp_file)
+    log_reporter = [OptimizerLogReport(path_log_file=path_temp_file)]
 
     dataset_train = TwoSampleDataSet(x_train, y_train)
     dataset_val = TwoSampleDataSet(x_test, y_test)
@@ -75,7 +76,7 @@ def test_training_wandb_report():
         # skip the test
         return
 
-    log_reporter = WandbReport()
+    log_reporter = [OptimizerWandbReport()]
     dataset_train = TwoSampleDataSet(x_train, y_train)
     dataset_val = TwoSampleDataSet(x_test, y_test)
 

@@ -8,7 +8,7 @@ import numpy as np
 from tempfile import mkdtemp
 
 
-def test_unit():
+def test_unit_stats_tests():
     x_same = np.random.normal(loc=5, scale=0.5, size=(100, 200))
     seq_x_eval = [np.random.normal(loc=5, scale=0.5, size=(100, 200)) for i in range(0, 3)]
     y_same = np.random.normal(loc=5, scale=0.5, size=(100, 200))
