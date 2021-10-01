@@ -492,7 +492,8 @@ class ModelTrainerTorchBackend(TrainerBase):
               args_optimizer: typing.Optional[typing.Dict[str, typing.Any]] = None,
               is_use_lr_scheduler: bool = True,
               args_lr_scheduler: typing.Optional[typing.Dict[str, typing.Any]] = None,
-              report_to: typing.Optional[report_generators.BaseReport] = None) -> TrainedMmdParameters:
+              report_to: typing.Optional[typing.List[report_generators.OptimizerReport]] = None
+              ) -> TrainedMmdParameters:
         """Training (Optimization) of MMD parameters.
 
         Args:
@@ -523,7 +524,7 @@ class ModelTrainerTorchBackend(TrainerBase):
             args_optimizer: arguments of the optimizer object.
             is_use_lr_scheduler:
             args_lr_scheduler:
-            report_to: `report_generators.BaseReport` object that records log info.
+            report_to: list of `report_generators.BaseReport` object that records log info.
         Returns:
             TrainedMmdParameters
         """
@@ -595,7 +596,7 @@ class ModelTrainerTorchBackend(TrainerBase):
             training_params[variable] = eval(variable)
         # end for
         if report_to is not None:
-            report_to.start(training_params)
+            [r.start(training_params) for r in report_to]
         # end if
 
         avg_mmd2, avg_obj, avg_stat = self.run_validation(dataset_validation=dataset_validation,
@@ -644,7 +645,7 @@ class ModelTrainerTorchBackend(TrainerBase):
             training_log.append(log_record_obj)
             self.log_message(epoch, avg_mmd2, avg_obj, val_mmd2_pq, val_stat, val_obj)
             if report_to is not None:
-                report_to.record(log_object=log_record_obj)
+                [r.record(log_object=log_record_obj) for r in report_to]
             # end if
             if is_training_auto_stop and len(training_log) > auto_stop_epochs:
                 __val_validations = [t_obj.obj_validation for t_obj in training_log[epoch - auto_stop_epochs:epoch]]
@@ -669,10 +670,12 @@ class ModelTrainerTorchBackend(TrainerBase):
         )
 
         if report_to is not None:
-            if isinstance(report_to, report_generators.WandbReport):
-                result_obj.to_pickle(str(report_to.path_tmp_model_dir.joinpath(report_to.model_name)))
-            # end if
-            report_to.finish()
+            for r in report_to:
+                if isinstance(r, report_generators.WandbReport):
+                    result_obj.to_pickle(str(r.path_tmp_model_dir.joinpath(r.model_name)))
+                # end if
+                r.finish()
+            # end for
         # end if
         return result_obj
 

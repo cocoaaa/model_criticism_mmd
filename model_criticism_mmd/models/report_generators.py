@@ -27,7 +27,11 @@ class BaseReport(object):
         raise NotImplementedError()
 
 
-class LogReport(BaseReport):
+class OptimizerReport(BaseReport):
+    pass
+
+
+class OptimizerLogReport(OptimizerReport):
     def __init__(self,
                  path_log_file: str,
                  style: str = 'json'):
@@ -63,7 +67,7 @@ class LogReport(BaseReport):
         self.logger.info('end optimization.')
 
 
-class WandbReport(BaseReport):
+class WandbReport(OptimizerReport):
     def __init__(self,
                  project_name: str = 'model_criticism_mmd',
                  run_name: Optional[str] = None,

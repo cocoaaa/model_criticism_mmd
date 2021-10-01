@@ -199,8 +199,9 @@ class StatsTestEvaluator(object):
                  threshold_p_value: float = 0.05,
                  ratio_training: float = 0.8,
                  kernels_no_optimization: typing.Optional[typing.List[kernels_torch.BaseKernel]] = None,
-                 report_to: typing.Optional[BaseReport] = None,
-                 batch_size: int = 256):
+                 batch_size: int = 256,
+                 report_to: typing.Optional[typing.List[BaseReport]] = None,
+                 ):
         """
 
         Args:
