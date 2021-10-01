@@ -199,7 +199,8 @@ class StatsTestEvaluator(object):
                  threshold_p_value: float = 0.05,
                  ratio_training: float = 0.8,
                  kernels_no_optimization: typing.Optional[typing.List[kernels_torch.BaseKernel]] = None,
-                 report_to: typing.Optional[BaseReport] = None):
+                 report_to: typing.Optional[BaseReport] = None,
+                 batch_size: int = 256):
         """
 
         Args:
@@ -211,6 +212,7 @@ class StatsTestEvaluator(object):
             threshold_p_value:
             ratio_training:
             kernels_no_optimization:
+            batch_size: batch_size for the computations.
             report_to: `model_criticism_mmd.models.report_generators.BaseReport`
         """
         self.candidate_kernels = candidate_kernels
@@ -222,6 +224,7 @@ class StatsTestEvaluator(object):
         self.ratio_training = ratio_training
         self.kernels_no_optimization = kernels_no_optimization
         self.report_to = report_to
+        self.batch_size = batch_size
 
     def function_separation(self, x: torch.Tensor, y: torch.Tensor) -> typing.Tuple[TwoSampleDataSet, TwoSampleDataSet]:
         ind_training = int((len(x) - 1) * self.ratio_training)
@@ -272,7 +275,8 @@ class StatsTestEvaluator(object):
                                            device_obj=self.device_obj,
                                            is_training=True,
                                            dataset_training=ds_train,
-                                           candidate_kernels=self.candidate_kernels)
+                                           candidate_kernels=self.candidate_kernels,
+                                           batchsize=self.batch_size)
         # todo log selection process into report.
         selection_result = kernel_selector.run_selection(is_shuffle=False,
                                                          is_training_auto_stop=True,
