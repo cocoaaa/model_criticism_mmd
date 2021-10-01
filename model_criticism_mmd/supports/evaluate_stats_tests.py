@@ -1,5 +1,10 @@
+import pathlib
+import pickle
+
+import dataclasses
 import pandas
 from dataclasses import dataclass
+from collections import MutableSequence
 import numpy as np
 import torch
 
@@ -17,6 +22,7 @@ from model_criticism_mmd.logger_unit import logger
 
 from model_criticism_mmd.models.report_generators import BaseReport
 
+
 @dataclass
 class TestResult(object):
     codename_experiment: str
@@ -30,11 +36,72 @@ class TestResult(object):
     scales: torch.Tensor
     distributions_permutation_test: torch.Tensor
     statistics_whole: float
+    mmd_estimator: typing.Optional[torch.nn.Module] = None
+
+
+class TestResultList(MutableSequence):
+    """A container for manipulating lists of hosts"""
+    def __init__(self, data: typing.List[TestResult] = None):
+        """Initialize the class"""
+        super(TestResultList, self).__init__()
+        if (data is not None):
+            assert all([isinstance(d, TestResult) for d in data]), 'Input must be `typing.List[TestResult]`'
+            self._list = list(data)
+        else:
+            self._list = list()
+
+    def __repr__(self):
+        return "<{0} {1}>".format(self.__class__.__name__, self._list)
+
+    def __len__(self):
+        """List length"""
+        return len(self._list)
+
+    def __getitem__(self, ii):
+        """Get a list item"""
+        return self._list[ii]
+
+    def __delitem__(self, ii):
+        """Delete an item"""
+        del self._list[ii]
+
+    def __setitem__(self, ii, val):
+        # optional: self._acl_check(val)
+        self._list[ii] = val
+
+    def __str__(self):
+        return str(self._list)
+
+    def insert(self, ii, val):
+        # optional: self._acl_check(val)
+        self._list.insert(ii, val)
+
+    def append(self, val):
+        self.insert(len(self._list), val)
+
+    def save_test_results(self, path_target: pathlib.Path, file_format: str = 'torch'):
+        """Dumps everything into .pickle or .torch.
+        The content of the file is `dict`.
+
+        Args:
+            path_target: A path to save
+            file_format: pickle or torch
+        """
+        assert file_format in ('pickle', 'torch'), f'{file_format} is not acceptable. Must be either pickle or torch.'
+        assert path_target.parent.exists(), f'No path named {path_target.parent}'
+        data_dict = [dataclasses.asdict(d) for d in sorted(self._list, key=lambda d: d['ratio'], reverse=True)]
+        with path_target.open('wb') as f:
+            if file_format == 'pickle':
+                pickle.dump(data_dict, f)
+            elif file_format == 'torch':
+                torch.save(data_dict, f)
+            else:
+                raise NotImplementedError('Exception.')
 
 
 @dataclass
 class TestResultGroupsFormatter(object):
-    test_result: typing.List[TestResult]
+    test_result: TestResultList
 
     @staticmethod
     def __function_test_result_type(record: typing.Union[pandas.DataFrame, typing.Dict]) -> str:
@@ -238,7 +305,7 @@ class StatsTestEvaluator(object):
                                         y: torch.Tensor,
                                         mmd_estimators: typing.List[typing.Tuple[MMD, float]],
                                         code_approach: str,
-                                        is_same_distribution: bool) -> typing.List[TestResult]:
+                                        is_same_distribution: bool) -> TestResultList:
         """Run permutation tests with the given all kernels.
 
         Args:
@@ -251,7 +318,7 @@ class StatsTestEvaluator(object):
         Returns:
 
         """
-        results = []
+        results = TestResultList()
         for estimator_obj, ratio in mmd_estimators:
             # todo start loggin into wandb.
             # todo saving parameters
@@ -289,7 +356,8 @@ class StatsTestEvaluator(object):
                                       p_value=__p,
                                       scales=scales,
                                       distributions_permutation_test=distributions_test,
-                                      statistics_whole=__mmd_whole))
+                                      statistics_whole=__mmd_whole,
+                                      mmd_estimator=estimator_obj))
         # end for
         return results
 
@@ -302,7 +370,7 @@ class StatsTestEvaluator(object):
                   seq_y_eval_same: typing.Optional[typing.List[typing.Union[torch.Tensor, np.ndarray]]] = None,
                   seq_y_eval_diff: typing.Optional[typing.List[typing.Union[torch.Tensor, np.ndarray]]] = None,
                   **kwargs
-                  ) -> typing.List[TestResult]:
+                  ) -> TestResultList:
         """Run permutation tests for cases where X=Y and X!=Y.
 
         Args:
@@ -315,9 +383,9 @@ class StatsTestEvaluator(object):
             seq_y_eval_diff: List of Y-diff for evaluation.
             **kwargs: keywords for ModelTrainerTorchBackend.train()
 
-        Returns: [TestResult]
+        Returns: TestResultList
         """
-        test_result = []
+        test_result = TestResultList()
 
         if y_train_same is None and y_train_diff is None:
             raise Exception('Either of y_train_same or y_train_diff should be given.')
@@ -371,5 +439,8 @@ class StatsTestEvaluator(object):
             # end for
         # end if
 
+        # todo save estimator_same and estimator_diff. But, how?
+        # todo put it in attribute, and put save_mmd_models()
+        # todo save
         return test_result
 
