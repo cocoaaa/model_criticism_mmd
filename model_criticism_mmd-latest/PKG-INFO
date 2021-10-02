@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: model-criticism-mmd
-Version: 2.6.1
+Version: 2.7
 Summary: A Model criticism on distributions via MMD
 License: BSD
 Author: Kensuke Mitsuzawa
@@ -97,7 +97,7 @@ make test
 The source code is licensed MIT. The website content is licensed CC BY 4.0.
 
 ```
-@misc{sumo-docker-pipeline,
+@misc{model-criticism-mmd-implementation-public,
   author = {Kensuke Mitsuzawa},
   title = {model-criticism-mmd},
   year = {2021},

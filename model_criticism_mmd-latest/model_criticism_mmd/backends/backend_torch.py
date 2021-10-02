@@ -9,12 +9,13 @@ from model_criticism_mmd.models import TrainingLog, TrainedMmdParameters, Traine
 from model_criticism_mmd.models.static import MmdValues, TypeInputData, DEFAULT_DEVICE
 from model_criticism_mmd.backends import kernels_torch
 from model_criticism_mmd.exceptions import NanException
+from model_criticism_mmd.models import report_generators
 import gc
 
 device_default = torch.device('cpu')
 
 
-class MMD(object):
+class MMD(torch.nn.Module):
     def __init__(self,
                  kernel_function_obj: kernels_torch.BaseKernel,
                  scales: typing.Optional[torch.Tensor] = None,
@@ -29,6 +30,7 @@ class MMD(object):
             device_obj: device object of torch.
             biased: If True, then MMD estimator is biased estimator. Else unbiased estimator.
         """
+        super(MMD, self).__init__()
         self.kernel_function_obj = kernel_function_obj
         self.device_obj = device_obj
         self.min_var_est = torch.tensor([1e-8], dtype=torch.float64, device=device_obj)
@@ -192,11 +194,11 @@ class MMD(object):
         # end if
     # end if
 
-    def mmd_distance(self,
-                     x: TypeInputData,
-                     y: TypeInputData,
-                     is_detach: bool = False,
-                     **kwargs) -> MmdValues:
+    def forward(self,
+                x: TypeInputData,
+                y: TypeInputData,
+                is_detach: bool = False,
+                **kwargs) -> MmdValues:
         """Computes MMD value.
 
         Returns:
@@ -220,6 +222,13 @@ class MMD(object):
             return MmdValues(mmd2.cpu().detach(), ratio.cpu().detach())
         else:
             return MmdValues(mmd2, ratio)
+
+    def mmd_distance(self,
+                     x: TypeInputData,
+                     y: TypeInputData,
+                     is_detach: bool = False,
+                     **kwargs) -> MmdValues:
+        return self.forward(x, y, is_detach, **kwargs)
 
 
 class ModelTrainerTorchBackend(TrainerBase):
@@ -263,6 +272,14 @@ class ModelTrainerTorchBackend(TrainerBase):
         # end if
         return scales
 
+    @staticmethod
+    def __check_valid_batch(dataset: TwoSampleDataSet, batch_size: int) -> bool:
+        assert (len(dataset.x) % batch_size > 1) or (len(dataset.x) % batch_size == 0), \
+            f'Specify another batch_size. len(x) mod {batch_size} = {len(dataset.x) % batch_size}'
+        assert (len(dataset.x) % batch_size > 1) or (len(dataset.x) % batch_size == 0), \
+            f'Specify another batch_size. len(x) mod {batch_size} = {len(dataset.x) % batch_size}'
+        return True
+
     def run_validation(self,
                        dataset_validation: TwoSampleDataSet,
                        batchsize: int,
@@ -282,10 +299,12 @@ class ModelTrainerTorchBackend(TrainerBase):
                          f'N(x)={dataset_validation.length_x},N(y)={dataset_validation.length_y} < batchsize')
             is_validation_all = True
         # end if
+        self.__check_valid_batch(dataset_validation, batchsize)
 
         if is_validation_all:
+            reg_term = self.generate_regularization_term(reg=reg, reg_strategy=reg_strategy, reg_lambda=reg_lambda)
             x_val, y_val = dataset_validation.get_all_item()
-            val_mmd2_pq, val_stat, val_obj = self.forward(x_val, y_val, reg=reg, is_validation=True)
+            val_mmd2_pq, val_stat, val_obj = self.forward(x_val, y_val, reg=reg_term, is_validation=True)
             if is_first_iter:
                 logger.info(
                     f'Validation at 0. MMD^2 = {val_mmd2_pq.detach().cpu().numpy()}, '
@@ -306,7 +325,8 @@ class ModelTrainerTorchBackend(TrainerBase):
                                                           batch_size=batchsize, shuffle=is_shuffle)
             # end if
             for xbatch, ybatch in data_loader:
-                mmd2_pq, stat, obj = self.forward(xbatch, ybatch, reg=reg)
+                reg_term = self.generate_regularization_term(reg=reg, reg_strategy=reg_strategy, reg_lambda=reg_lambda)
+                mmd2_pq, stat, obj = self.forward(xbatch, ybatch, reg=reg_term)
                 # end if
                 assert np.isfinite(mmd2_pq.detach().cpu().numpy())
                 assert np.isfinite(obj.detach().cpu().numpy())
@@ -347,6 +367,7 @@ class ModelTrainerTorchBackend(TrainerBase):
         total_obj = 0
         total_stat = 0
         n_batches = 0
+        self.__check_valid_batch(dataset, batchsize)
 
         if self.device_obj == torch.device('cpu'):
             data_loader = torch.utils.data.DataLoader(dataset, batch_size=batchsize, shuffle=is_shuffle,
@@ -472,7 +493,9 @@ class ModelTrainerTorchBackend(TrainerBase):
               name_optimizer: str = 'SGD',
               args_optimizer: typing.Optional[typing.Dict[str, typing.Any]] = None,
               is_use_lr_scheduler: bool = True,
-              args_lr_scheduler: typing.Optional[typing.Dict[str, typing.Any]] = None) -> TrainedMmdParameters:
+              args_lr_scheduler: typing.Optional[typing.Dict[str, typing.Any]] = None,
+              report_to: typing.Optional[typing.List[report_generators.OptimizerReport]] = None
+              ) -> TrainedMmdParameters:
         """Training (Optimization) of MMD parameters.
 
         Args:
@@ -484,7 +507,6 @@ class ModelTrainerTorchBackend(TrainerBase):
             reg_strategy:
             reg_lambda:
             initial_scale: initial value of scales vector. If None, the vector is initialized randomly.
-            lr: learning rate
             opt_log: flag to control training procedure. If True, then objective-value has lower-bound. else Not.
             dataset_validation:
             num_workers: #worker for training.
@@ -504,6 +526,7 @@ class ModelTrainerTorchBackend(TrainerBase):
             args_optimizer: arguments of the optimizer object.
             is_use_lr_scheduler:
             args_lr_scheduler:
+            report_to: list of `report_generators.BaseReport` object that records log info.
         Returns:
             TrainedMmdParameters
         """
@@ -561,6 +584,22 @@ class ModelTrainerTorchBackend(TrainerBase):
         else:
             scheduler = None
         # end if
+        training_params = {}
+        for variable in ['num_epochs', 'batchsize', 'reg', 'opt_log',
+                         'is_scales_non_negative', 'is_training_auto_stop',
+                         'auto_stop_threshold', 'auto_stop_epochs',
+                         'is_shuffle',
+                         'reg_strategy',
+                         'reg_lambda',
+                         'name_optimizer',
+                         'args_optimizer',
+                         'is_use_lr_scheduler',
+                         'args_lr_scheduler']:
+            training_params[variable] = eval(variable)
+        # end for
+        if report_to is not None:
+            [r.start(training_params) for r in report_to]
+        # end if
 
         avg_mmd2, avg_obj, avg_stat = self.run_validation(dataset_validation=dataset_validation,
                                                           batchsize=batchsize,
@@ -596,16 +635,20 @@ class ModelTrainerTorchBackend(TrainerBase):
                                                                  reg=__reg,
                                                                  reg_strategy=reg_strategy,
                                                                  reg_lambda=reg_lambda)
-            training_log.append(TrainingLog(epoch=epoch,
-                                            avg_mmd_training=avg_mmd2.detach().cpu().numpy(),
-                                            avg_obj_train=avg_obj.detach().cpu().numpy(),
-                                            mmd_validation=val_mmd2_pq.detach().cpu().numpy(),
-                                            obj_validation=val_obj.detach().cpu().numpy(),
-                                            sigma=None,
-                                            scales=self.scales.detach().cpu().numpy(),
-                                            ratio_training=avg_stat.item(),
-                                            ratio_validation=val_stat.item()))
+            log_record_obj = TrainingLog(epoch=epoch,
+                                         avg_mmd_training=avg_mmd2.item(),
+                                         avg_obj_train=avg_obj.item(),
+                                         mmd_validation=val_mmd2_pq.item(),
+                                         obj_validation=val_obj.item(),
+                                         sigma=None,
+                                         scales=self.scales.detach().cpu().numpy(),
+                                         ratio_training=avg_stat.item(),
+                                         ratio_validation=val_stat.item())
+            training_log.append(log_record_obj)
             self.log_message(epoch, avg_mmd2, avg_obj, val_mmd2_pq, val_stat, val_obj)
+            if report_to is not None:
+                [r.record(log_object=log_record_obj) for r in report_to]
+            # end if
             if is_training_auto_stop and len(training_log) > auto_stop_epochs:
                 __val_validations = [t_obj.obj_validation for t_obj in training_log[epoch - auto_stop_epochs:epoch]]
                 __variance_validations = max(__val_validations) - min(__val_validations)
@@ -620,10 +663,23 @@ class ModelTrainerTorchBackend(TrainerBase):
                 scheduler.step(val_obj)
             # end if
         # end for
-        return TrainedMmdParameters(
+
+        result_obj = TrainedMmdParameters(
             scales=self.scales.detach().cpu().numpy(),
             training_log=training_log,
-            kernel_function_obj=self.mmd_estimator.kernel_function_obj)
+            kernel_function_obj=self.mmd_estimator.kernel_function_obj,
+            torch_model=self.mmd_estimator
+        )
+
+        if report_to is not None:
+            for r in report_to:
+                if isinstance(r, report_generators.OptimizerWandbReport):
+                    result_obj.to_pickle(str(r.path_tmp_model_dir.joinpath(r.model_name)))
+                # end if
+                r.finish()
+            # end for
+        # end if
+        return result_obj
 
     def mmd_distance(self,
                      x: TypeInputData,
